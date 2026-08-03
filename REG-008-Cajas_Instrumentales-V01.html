@@ -3641,10 +3641,10 @@ const MC = {
     div.innerHTML=`
       <div class="caja-header" onclick="MC.toggleCaja(this)">
         <div>
-          <span style="font-family:var(--mono);font-weight:600;font-size:12px;color:var(--accent)">${esc(caja.codigo||"")}</span>
-          <span style="font-size:12px;font-weight:600;margin-left:${caja.codigo?"8px":"0"}">${esc(caja.nombre||"Sin nombre")}</span>
+          <span class="hdr-codigo" style="font-family:var(--mono);font-weight:600;font-size:12px;color:var(--accent)">${esc(caja.codigo||"")}</span>
+          <span class="hdr-nombre" style="font-size:12px;font-weight:600;margin-left:${caja.codigo?"8px":"0"}">${esc(caja.nombre||"Sin nombre")}</span>
         </div>
-        <span class="badge badge-neu" style="font-size:10px">${esc(caja.sistema||"—")}</span>
+        <span class="badge badge-neu hdr-sistema" style="font-size:10px">${esc(caja.sistema||"—")}</span>
 <button class="btn btn-light btn-sm no-print" onclick="event.stopPropagation();imprimirCajaMaestro('${esc(caja.id)}')">↓ PDF</button>
 <span style="font-size:11px;color:var(--text-3);white-space:nowrap">${(caja.items||[]).length} ítems</span>
 <span class="caja-expand">▶</span>
@@ -3654,15 +3654,15 @@ const MC = {
           <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:8px">
             <div class="form-field">
               <label class="form-label">Código</label>
-              <input class="form-input mc-codigo" type="text" value="${esc(caja.codigo||"")}" placeholder="CAJ-000" oninput="MC.dirty()">
+              <input class="form-input mc-codigo" type="text" value="${esc(caja.codigo||"")}" placeholder="CAJ-000" oninput="MC.dirty();MC.syncHeader(this)">
             </div>
             <div class="form-field">
               <label class="form-label">Nombre</label>
-              <input class="form-input mc-nombre" type="text" value="${esc(caja.nombre||"")}" placeholder="Nombre de la caja" oninput="MC.dirty()">
+              <input class="form-input mc-nombre" type="text" value="${esc(caja.nombre||"")}" placeholder="Nombre de la caja" oninput="MC.dirty();MC.syncHeader(this)">
             </div>
             <div class="form-field">
               <label class="form-label">Sistema</label>
-              <input class="form-input mc-sistema" type="text" value="${esc(caja.sistema||"")}" placeholder="Ej: Columna, Rodilla…" oninput="MC.dirty()">
+              <input class="form-input mc-sistema" type="text" value="${esc(caja.sistema||"")}" placeholder="Ej: Columna, Rodilla…" oninput="MC.dirty();MC.syncHeader(this)">
             </div>
 
           </div>
@@ -3781,6 +3781,22 @@ const MC = {
       document.getElementById("hint-cajas-vacio").style.display="";
     MC.dirty();
     updateMaestroKpis();
+  },
+  syncHeader(inputEl){
+    const item = inputEl.closest(".caja-item");
+    if(!item) return;
+    const codigo  = item.querySelector(".mc-codigo")?.value.trim()  || "";
+    const nombre  = item.querySelector(".mc-nombre")?.value.trim()  || "";
+    const sistema = item.querySelector(".mc-sistema")?.value.trim() || "";
+    const hdrCodigo  = item.querySelector(".hdr-codigo");
+    const hdrNombre  = item.querySelector(".hdr-nombre");
+    const hdrSistema = item.querySelector(".hdr-sistema");
+    if(hdrCodigo)  hdrCodigo.textContent  = codigo;
+    if(hdrNombre){
+      hdrNombre.textContent = nombre || "Sin nombre";
+      hdrNombre.style.marginLeft = codigo ? "8px" : "0";
+    }
+    if(hdrSistema) hdrSistema.textContent = sistema || "—";
   },
   dirty(){ setInlineSt("mc-st","Cambios sin guardar","dirty"); },
   render(){
