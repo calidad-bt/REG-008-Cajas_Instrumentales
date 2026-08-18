@@ -602,8 +602,6 @@ tr.drag-over td { background: var(--accent-l) !important; border-top: 2px solid 
 .login-btn { width: 100%; height: 38px; margin-top: 6px; font-family: var(--font); font-size: 13px; font-weight: 700; background: var(--accent); color: white; border: none; border-radius: var(--radius); cursor: pointer; }
 .login-btn:hover { filter: brightness(.92); }
 .login-error { font-size: 11px; color: var(--err-text); margin-top: 8px; text-align: center; min-height: 16px; }
-.login-skip { font-size: 11px; color: var(--text-3); text-align: center; margin-top: 14px; cursor: pointer; text-decoration: underline; }
-.login-skip:hover { color: var(--text-2); }
 #session-bar { position: fixed; top: calc(var(--nav-h) + 6px); right: 20px; z-index: 201; min-height: 26px; display: flex; align-items: center; gap: 10px; padding: 4px 10px; pointer-events: none; background: var(--accent-d); border: 1px solid rgba(255,255,255,.25); border-radius: 4px; box-shadow: 0 2px 8px rgba(0,0,0,.12); }
 .session-user { font-size: 11px; font-family: var(--mono); color: rgba(255,255,255,.85); pointer-events: auto; }
 .session-out { font-size: 11px; color: rgba(255,255,255,.75); cursor: pointer; text-decoration: underline; pointer-events: auto; }
@@ -4127,7 +4125,6 @@ window.addEventListener("DOMContentLoaded", ()=>{
     </div>
     <button class="login-btn" onclick="doLogin()">Ingresar</button>
     <div class="login-error" id="login-error"></div>
-    <div class="login-skip" onclick="doSkip()">Solo visualización</div>
   </div>
 </div>
 
@@ -4203,11 +4200,11 @@ function requireLogin(seccion){
 }
 
 /* ── TIMEOUT DE SESIÓN ───────────────────────────────────── */
-const SESSION_TIMEOUT_MS = 8 * 60 * 60 * 1000; // 8 horas
+const SESSION_TIMEOUT_MS = 60 * 60 * 1000; // 1 hora
 let _sessionTimer = null;
 
 function resetSessionTimer(){
-  if(!sesionActual || sesionActual.id === "viewer") return;
+  if(!sesionActual) return;
   clearTimeout(_sessionTimer);
   try{ sessionStorage.setItem("bt_last_active", Date.now().toString()); }catch(e){}
   _sessionTimer = setTimeout(()=>{
@@ -4217,7 +4214,7 @@ function resetSessionTimer(){
 }
 
 function checkSessionTimeout(){
-  if(!sesionActual || sesionActual.id === "viewer") return;
+  if(!sesionActual) return;
   try{
     const last = parseInt(sessionStorage.getItem("bt_last_active") || "0");
     if(last && (Date.now() - last) > SESSION_TIMEOUT_MS){
@@ -4230,7 +4227,7 @@ function checkSessionTimeout(){
 
 // Resetear el timer en cualquier interacción
 ["click","keydown","mousemove","touchstart"].forEach(evt=>{
-  document.addEventListener(evt, ()=>{ if(sesionActual?.id && sesionActual.id !== "viewer") resetSessionTimer(); }, { passive:true });
+  document.addEventListener(evt, ()=>{ if(sesionActual?.id) resetSessionTimer(); }, { passive:true });
 });
 
 // Logout al refrescar la página (beforeunload limpia la sesión; pagehide cubre mobile)
@@ -4279,14 +4276,6 @@ async function doLogin(){
   aplicarPermisos();
 }
 
-function doSkip(){
-  sesionActual = { id:"viewer", nombre:"Solo visualización", usuario:"", mail:"", permisos:[] };
-  sessionStorage.setItem("bt_session", JSON.stringify(sesionActual));
-  ocultarLoginMostrarApp();
-  limpiarFormulario();
-  aplicarPermisos();
-}
-
 function doLogout(){
   clearTimeout(_sessionTimer);
   sesionActual = null;
@@ -4311,7 +4300,7 @@ function ocultarLoginMostrarApp(){
   if(sb){
     sb.style.display = "flex";
     const lbl = document.getElementById("session-user-label");
-    if(lbl) lbl.textContent = sesionActual?.nombre || "Solo visualización";
+    if(lbl) lbl.textContent = sesionActual?.nombre || "";
   }
 
   // Siempre abrir en Formulario de pedidos al ingresar
