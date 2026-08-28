@@ -308,6 +308,10 @@ tr.drag-over td { background: var(--accent-l) !important; border-top: 2px solid 
 .badge-info { background: #E3F2FD; color: #1565C0; border: 1px solid #90CAF9; }
 .badge-neu  { background: var(--bg); color: var(--text-2); border: 1px solid var(--border); }
 
+/* ── CARGA BADGE (historial de cambios, solo admin) ───────── */
+.carga-badge{display:inline-flex; align-items:center; justify-content:center; margin-left:5px; color:var(--text-3); cursor:default; vertical-align:middle;}
+.carga-badge:hover{color:var(--accent);}
+
 /* ── PROGRESS BAR ────────────────────────────────────────── */
 .progress-wrap {
   height: 8px; background: var(--bg);
@@ -1201,6 +1205,11 @@ tr.drag-over td { background: var(--accent-l) !important; border-top: 2px solid 
         <div class="kpi-card kpi-green">
           <div class="kpi-value" id="kpi-avance">0%</div>
           <div class="kpi-label">Avance promedio</div>
+        </div>
+        <div class="kpi-card kpi-blue">
+          <div class="kpi-value" id="kpi-tiempo-entrega">—</div>
+          <div class="kpi-label">Tiempo prom. de entrega</div>
+          <div class="kpi-sub" id="kpi-tiempo-entrega-sub">0 pedidos completados</div>
         </div>
         <div class="kpi-card kpi-orange">
           <div class="kpi-value" id="kpi-por-vencer">0</div>
@@ -2562,6 +2571,17 @@ function renderKpisSeguimiento(){
 
   setTxt("kpi-avance", avance + "%");
 
+  // Tiempo promedio de entrega: días entre la fecha del pedido (PED) y la fecha real de entrega (REAL)
+  const diasEntrega = todos
+    .filter(p => !p.eliminado && p.fecha && p.fechaReal)
+    .map(p => Math.round((new Date(p.fechaReal+"T00:00:00") - new Date(p.fecha+"T00:00:00")) / 86400000))
+    .filter(n => Number.isFinite(n) && n >= 0);
+  const promedioEntrega = diasEntrega.length
+    ? Math.round(diasEntrega.reduce((a,b)=>a+b,0) / diasEntrega.length)
+    : null;
+  setTxt("kpi-tiempo-entrega", promedioEntrega!=null ? promedioEntrega+" día"+(promedioEntrega===1?"":"s") : "—");
+  setTxt("kpi-tiempo-entrega-sub", `${diasEntrega.length} pedido${diasEntrega.length===1?"":"s"} completado${diasEntrega.length===1?"":"s"}`);
+
   setTxt("kpi-por-vencer", cajasPorVencer.length + instPorVencer.length);
   setTxt("kpi-por-vencer-sub", `${cajasPorVencer.length} cajas · ${instPorVencer.length} instrumentales`);
 
@@ -3536,16 +3556,16 @@ const MI = {
     else if(d.tipo==="PT") tipoCls = "background:var(--ok-bg);color:var(--ok-text)";
     else if(d.tipo==="COMP") tipoCls = "background:var(--warn-bg);color:var(--warn-text)";
     tr.innerHTML=`
-      <td data-label="#" style="text-align:center;font-family:var(--mono);font-size:11px"><span class="row-num">${i+1}</span></td>
-      <td data-label="Código"><input class="ti" type="text" value="${esc(d.codigo||"")}" placeholder="Código" oninput="MI.dirty()" onblur="MI.sortRows()"></td>
-      <td data-label="Descripción"><textarea class="cta" rows="1" placeholder="Descripción" oninput="MI.dirty();autoGrow(this)">${esc(d.nombre||"")}</textarea></td>
-      <td data-label="Cantidad" style="width:70px;text-align:center"><input class="ti" type="text" value="${esc(d.cantidad||"")}" placeholder="—" oninput="MI.dirty()" style="text-align:center"></td>
+      <td data-label="#" style="text-align:center;font-family:var(--mono);font-size:11px"><span class="row-num">${i+1}</span>${badgeCarga(d)}</td>
+      <td data-label="Código"><input class="ti" type="text" value="${esc(d.codigo||"")}" placeholder="Código" oninput="MI.dirty(this)" onblur="MI.sortRows()"></td>
+      <td data-label="Descripción"><textarea class="cta" rows="1" placeholder="Descripción" oninput="MI.dirty(this);autoGrow(this)">${esc(d.nombre||"")}</textarea></td>
+      <td data-label="Cantidad" style="width:70px;text-align:center"><input class="ti" type="text" value="${esc(d.cantidad||"")}" placeholder="—" oninput="MI.dirty(this)" style="text-align:center"></td>
       <td data-label="Tipo" style="width:90px">
-        <select class="ts mi-tipo-sel" style="${tipoCls};border-radius:20px;font-weight:700;padding:2px 18px 2px 8px" onchange="MI.colorTipo(this);MI.dirty()">
+        <select class="ts mi-tipo-sel" style="${tipoCls};border-radius:20px;font-weight:700;padding:2px 18px 2px 8px" onchange="MI.colorTipo(this);MI.dirty(this)">
           ${tipoSel}
         </select>
       </td>
-      <td data-label="Observaciones"><textarea class="cta" rows="1" placeholder="Observaciones…" oninput="MI.dirty();autoGrow(this)">${esc(d.obs||d.datos||"")}</textarea></td>
+      <td data-label="Observaciones"><textarea class="cta" rows="1" placeholder="Observaciones…" oninput="MI.dirty(this);autoGrow(this)">${esc(d.obs||d.datos||"")}</textarea></td>
       <td data-label="Eliminar" style="text-align:center;padding:4px" class="no-print"><button class="del-btn" onclick="MI.elim(this)">×</button></td>`;
     return tr;
   },
@@ -3562,6 +3582,7 @@ const MI = {
     const id = "inst_"+Date.now();
     const tr = this._buildTr({id}, 0);
     tr.dataset.id = id;
+    tr.dataset.touched = "1";
     tb.insertBefore(tr, tb.firstChild); renumTbody(tb); this.dirty();
     const codigoInput = tr.querySelector("input");
     if(codigoInput) codigoInput.focus();
@@ -3585,7 +3606,10 @@ const MI = {
     trs.forEach(tr=>tb.appendChild(tr));
     renumTbody(tb);
   },
-  dirty(){ setInlineSt("mi-st","Cambios sin guardar","dirty"); },
+  dirty(el){
+    if(el){ const tr = el.closest("tr"); if(tr) tr.dataset.touched = "1"; }
+    setInlineSt("mi-st","Cambios sin guardar","dirty");
+  },
   render(){
     const q = (document.getElementById("filtro-mi-q")?.value||"").toLowerCase().trim();
     document.querySelectorAll("#tbody-maestro-inst tr").forEach(tr=>{
@@ -3600,13 +3624,20 @@ const MI = {
       const ins = tr.querySelectorAll("input");
       const tas = tr.querySelectorAll("textarea.cta");
       const sel = tr.querySelector(".mi-tipo-sel");
+      const id = tr.dataset.id || ("inst_"+Date.now()+"_"+Math.random());
+      const prev = this._rows.find(r=>r.id===id);
+      const tocada = tr.dataset.touched === "1";
+      const cargadoPor = tocada ? (sesionActual?.nombre || sesionActual?.usuario || "") : (prev?._cargadoPor || "");
+      const cargadoTs  = tocada ? Date.now() : (prev?._cargadoTs || null);
       return {
-        id:       tr.dataset.id || ("inst_"+Date.now()+"_"+Math.random()),
+        id,
         codigo:   ins[0]?.value||"",
         nombre:   tas[0]?.value||"",
         cantidad: ins[1]?.value||"",
         tipo:     sel?.value||"",
-        obs:      tas[1]?.value||""
+        obs:      tas[1]?.value||"",
+        _cargadoPor: cargadoPor,
+        _cargadoTs:  cargadoTs
       };
     });
   },
@@ -3618,7 +3649,21 @@ const MI = {
     try{ await fbSet(FB_MI, pay); setSyncStatus("En vivo","sync-ok"); }
     catch(e){ setSyncStatus("Sin conexión","sync-error"); }
     setInlineSt("mi-st","✓ Guardado "+new Date().toLocaleTimeString(),"ok");
+    this._refreshBadges();
     cargarSelectoresFormulario();
+  },
+  _refreshBadges(){
+    document.querySelectorAll("#tbody-maestro-inst tr").forEach(tr=>{
+      const row = this._rows.find(r=>r.id===tr.dataset.id);
+      if(!row) return;
+      const td = tr.querySelector('td[data-label="#"]');
+      if(td){
+        const old = td.querySelector(".carga-badge");
+        if(old) old.remove();
+        td.insertAdjacentHTML("beforeend", badgeCarga(row));
+      }
+      tr.dataset.touched = "0";
+    });
   },
   restore(rows){
     this._rows = rows || [];
@@ -3673,7 +3718,7 @@ const MC = {
       <div class="caja-header" onclick="MC.toggleCaja(this)">
         <div>
           <span class="hdr-codigo" style="font-family:var(--mono);font-weight:600;font-size:12px;color:var(--accent)">${esc(caja.codigo||"")}</span>
-          <span class="hdr-nombre" style="font-size:12px;font-weight:600;margin-left:${caja.codigo?"8px":"0"}">${esc(caja.nombre||"Sin nombre")}</span>
+          <span class="hdr-nombre" style="font-size:12px;font-weight:600;margin-left:${caja.codigo?"8px":"0"}">${esc(caja.nombre||"Sin nombre")}</span>${badgeCarga(caja)}
         </div>
         <span class="badge badge-neu hdr-sistema" style="font-size:10px">${esc(caja.sistema||"—")}</span>
 <button class="btn btn-light btn-sm no-print" onclick="event.stopPropagation();imprimirCajaMaestro('${esc(caja.id)}')">↓ PDF</button>
@@ -3685,15 +3730,15 @@ const MC = {
           <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:8px">
             <div class="form-field">
               <label class="form-label">Código</label>
-              <input class="form-input mc-codigo" type="text" value="${esc(caja.codigo||"")}" placeholder="CAJ-000" oninput="MC.dirty();MC.syncHeader(this)">
+              <input class="form-input mc-codigo" type="text" value="${esc(caja.codigo||"")}" placeholder="CAJ-000" oninput="MC.dirty();MC.syncHeader(this);MC.touch(this)">
             </div>
             <div class="form-field">
               <label class="form-label">Nombre</label>
-              <input class="form-input mc-nombre" type="text" value="${esc(caja.nombre||"")}" placeholder="Nombre de la caja" oninput="MC.dirty();MC.syncHeader(this)">
+              <input class="form-input mc-nombre" type="text" value="${esc(caja.nombre||"")}" placeholder="Nombre de la caja" oninput="MC.dirty();MC.syncHeader(this);MC.touch(this)">
             </div>
             <div class="form-field">
               <label class="form-label">Sistema</label>
-              <input class="form-input mc-sistema" type="text" value="${esc(caja.sistema||"")}" placeholder="Ej: Columna, Rodilla…" oninput="MC.dirty();MC.syncHeader(this)">
+              <input class="form-input mc-sistema" type="text" value="${esc(caja.sistema||"")}" placeholder="Ej: Columna, Rodilla…" oninput="MC.dirty();MC.syncHeader(this);MC.touch(this)">
             </div>
 
           </div>
@@ -3741,15 +3786,15 @@ const MC = {
     tr.innerHTML=`
       <td class="no-print" data-label="" style="padding:0 4px;width:22px"><span class="drag-handle">⋮⋮</span></td>
       <td data-label="#" style="text-align:center"><span class="row-num">${i+1}</span></td>
-      <td data-label="Código"><input class="ti" type="text" value="${esc(item.codigo||"")}" placeholder="Código" oninput="MC.dirty()"></td>
-      <td data-label="Descripción"><textarea class="cta" rows="1" placeholder="Descripción del ítem" oninput="MC.dirty();autoGrow(this)">${esc(item.nombre||"")}</textarea></td>
-      <td data-label="Lote"><input class="ti mc-item-lote" type="text" value="${esc(item.lote||"")}" placeholder="—" oninput="MC.dirty()"></td>
-      <td data-label="Cant." style="text-align:center"><input class="ti" type="text" value="${esc(item.cantidad||"")}" placeholder="—" style="width:55px;text-align:center" oninput="MC.dirty()"></td>
+      <td data-label="Código"><input class="ti" type="text" value="${esc(item.codigo||"")}" placeholder="Código" oninput="MC.dirty();MC.touch(this)"></td>
+      <td data-label="Descripción"><textarea class="cta" rows="1" placeholder="Descripción del ítem" oninput="MC.dirty();autoGrow(this);MC.touch(this)">${esc(item.nombre||"")}</textarea></td>
+      <td data-label="Lote"><input class="ti mc-item-lote" type="text" value="${esc(item.lote||"")}" placeholder="—" oninput="MC.dirty();MC.touch(this)"></td>
+      <td data-label="Cant." style="text-align:center"><input class="ti" type="text" value="${esc(item.cantidad||"")}" placeholder="—" style="width:55px;text-align:center" oninput="MC.dirty();MC.touch(this)"></td>
       <td data-label="Tipo" style="width:80px">
-        <select class="ts mc-tipo-sel" style="${tipoCls};border-radius:20px;font-weight:700;font-size:11px;padding:2px 18px 2px 8px" onchange="MC.colorItemTipo(this);MC.dirty()">${tipoSel}</select>
+        <select class="ts mc-tipo-sel" style="${tipoCls};border-radius:20px;font-weight:700;font-size:11px;padding:2px 18px 2px 8px" onchange="MC.colorItemTipo(this);MC.dirty();MC.touch(this)">${tipoSel}</select>
       </td>
-      <td data-label="Observaciones"><textarea class="cta" rows="1" placeholder="Observaciones…" oninput="MC.dirty();autoGrow(this)">${esc(item.obs||"")}</textarea></td>
-      <td data-label="Eliminar" style="text-align:center;padding:4px" class="no-print"><button class="del-btn" onclick="this.closest('tr').remove();renumTbody(this.closest('tbody'));MC.dirty()">×</button></td>`;
+      <td data-label="Observaciones"><textarea class="cta" rows="1" placeholder="Observaciones…" oninput="MC.dirty();autoGrow(this);MC.touch(this)">${esc(item.obs||"")}</textarea></td>
+      <td data-label="Eliminar" style="text-align:center;padding:4px" class="no-print"><button class="del-btn" onclick="MC.touch(this);this.closest('tr').remove();renumTbody(this.closest('tbody'));MC.dirty()">×</button></td>`;
     return tr;
   },
   colorItemTipo(sel){
@@ -3774,6 +3819,10 @@ const MC = {
     item.classList.toggle("open");
     if(opening) this.renderItemsSiFalta(item);
   },
+  touch(el){
+    const item = el && el.closest && el.closest(".caja-item");
+    if(item) item.dataset.touched = "1";
+  },
   addItem(el){
     // el puede ser btn (clic en +Ítem) o tbody directo
     let tb;
@@ -3784,7 +3833,7 @@ const MC = {
     }
     if(!tb) return;
     tb.appendChild(MC._buildItemTr({}, tb.querySelectorAll("tr").length));
-    renumTbody(tb); MC.dirty();
+    renumTbody(tb); MC.dirty(); MC.touch(tb);
   },
   addCaja(){
   if(!requireLogin("maestro")) return;
@@ -3793,6 +3842,7 @@ const MC = {
     this._rows.unshift(caja);
     const list = document.getElementById("cajas-list");
     const newEl = this._buildCajaEl(caja, 0);
+    newEl.dataset.touched = "1";
     list.insertBefore(newEl, list.firstChild);
     document.getElementById("hint-cajas-vacio").style.display="none";
     this.dirty();
@@ -3860,12 +3910,19 @@ const MC = {
         // Nunca se abrió esta caja: usar los ítems tal como se cargaron (no se perdieron).
         items = this._itemsCache[div.dataset.id] || [];
       }
+      const id = div.dataset.id;
+      const prev = this._rows.find(r=>r.id===id);
+      const tocada = div.dataset.touched === "1";
+      const cargadoPor = tocada ? (sesionActual?.nombre || sesionActual?.usuario || "") : (prev?._cargadoPor || "");
+      const cargadoTs  = tocada ? Date.now() : (prev?._cargadoTs || null);
       return {
-        id:        div.dataset.id,
+        id,
         codigo:    div.querySelector(".mc-codigo")?.value||"",
         nombre:    div.querySelector(".mc-nombre")?.value||"",
         sistema:   div.querySelector(".mc-sistema")?.value||"",
-        items
+        items,
+        _cargadoPor: cargadoPor,
+        _cargadoTs:  cargadoTs
       };
     });
   },
@@ -3888,6 +3945,7 @@ const MC = {
     this._rows.push(copia);
     const list = document.getElementById("cajas-list");
     const newEl = this._buildCajaEl(copia, this._rows.length-1);
+    newEl.dataset.touched = "1";
     list.appendChild(newEl);
     newEl.classList.add("open");
     document.getElementById("hint-cajas-vacio").style.display="none";
@@ -3902,6 +3960,7 @@ const MC = {
     try{ await fbSet(FB_MC, pay); setSyncStatus("En vivo","sync-ok"); }
     catch(e){ setSyncStatus("Sin conexión","sync-error"); }
     setInlineSt("mc-st","✓ Guardado "+new Date().toLocaleTimeString(),"ok");
+    this._refreshBadges();
     cargarSelectoresFormulario();
   },
   restore(rows){
@@ -3924,6 +3983,19 @@ const MC = {
     const hint = document.getElementById("hint-cajas-vacio");
     if(hint) hint.style.display = this._rows.length ? "none" : "";
     updateMaestroKpis();
+  },
+  _refreshBadges(){
+    document.querySelectorAll("#cajas-list .caja-item").forEach(div=>{
+      const row = this._rows.find(r=>r.id===div.dataset.id);
+      if(!row) return;
+      const titleDiv = div.querySelector(".caja-header > div");
+      if(titleDiv){
+        const old = titleDiv.querySelector(".carga-badge");
+        if(old) old.remove();
+        titleDiv.insertAdjacentHTML("beforeend", badgeCarga(row));
+      }
+      div.dataset.touched = "0";
+    });
   }
 };
 
@@ -4203,6 +4275,19 @@ async function cargarUsuarios(){
   } catch(e){
     usuariosDB = [...USUARIOS_DEFAULT];
   }
+}
+
+/* ── HISTORIAL DE CAMBIOS: "quién cargó / editó" cada registro
+   del Maestro. Solo visible para usuarios con permiso de admin. ── */
+const ICON_USER = '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="12" cy="8" r="3.4" stroke="currentColor" stroke-width="1.8"/><path d="M5 19c0-3.3 3.1-6 7-6s7 2.7 7 6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>';
+function badgeCarga(obj){
+  if(!tienePermiso("admin")) return "";
+  const por = obj && obj._cargadoPor;
+  if(!por) return "";
+  const ts = obj._cargadoTs;
+  const fecha = ts ? new Date(ts).toLocaleString("es-AR", { day:"2-digit", month:"2-digit", year:"2-digit", hour:"2-digit", minute:"2-digit" }) : "";
+  const txt = "Cargado por: " + por + (fecha ? " · " + fecha : "");
+  return `<span class="carga-badge no-print" title="${esc(txt)}">${ICON_USER}</span>`;
 }
 
 function tienePermiso(seccion){
