@@ -1647,24 +1647,48 @@ function normCSV(v){
 }
 
 function parseCajasDesdeCSV(rows){
-  // Columnas esperadas: A Tipo de caja | B Caja | C Codigo | D Descripcion | E Lote | F Cant | G Tipo
-  const TIPO_MAP = { "INSTRUMENTAL": "W", "PARTES CAJAS E INSTR.": "W" };
+  // Mapeamos columnas por NOMBRE de encabezado (fila 0), no por posición fija.
+  // gviz/tq a veces reordena o descarta columnas casi vacías (ej: "Tipo de caja"),
+  // así que confiar en el índice fijo rompe todo si Google cambia el layout.
+  if(!rows.length) return [];
+  const norm = s => normCSV(s).toLowerCase().replace(/[áàä]/g,"a").replace(/[éèë]/g,"e").replace(/[íìï]/g,"i").replace(/[óòö]/g,"o").replace(/[úùü]/g,"u");
+  const header = rows[0].map(norm);
+  const findCol = (...names) => {
+    for(const n of names){
+      const i = header.indexOf(n);
+      if(i >= 0) return i;
+    }
+    return -1;
+  };
+  const idx = {
+    caja:   findCol("caja"),
+    codigo: findCol("codigo"),
+    desc:   findCol("descripcion"),
+    lote:   findCol("lote"),
+    cant:   findCol("cant", "cant.", "cantidad"),
+    tipo:   findCol("tipo")
+  };
+  if(idx.caja < 0 || idx.codigo < 0 || idx.desc < 0){
+    throw new Error("No encontré las columnas Caja/Codigo/Descripcion en el encabezado de la planilla (fila 1). Revisá que no se hayan renombrado.");
+  }
+
+  const TIPO_MAP = { "instrumental": "W", "partes cajas e instr.": "W" };
   const cajas = [];
   let current = null;
-  for(let i = 1; i < rows.length; i++){ // fila 0 = encabezados
+  for(let i = 1; i < rows.length; i++){
     const r = rows[i];
     if(!r) continue;
-    const cajaText = normCSV(r[1]);
-    const codigo   = normCSV(r[2]);
-    const desc     = normCSV(r[3]);
-    const lote     = normCSV(r[4]);
-    const cantRaw  = normCSV(r[5]);
-    const tipoRaw  = normCSV(r[6]);
+    const cajaText = normCSV(r[idx.caja]);
+    const codigo   = normCSV(r[idx.codigo]);
+    const desc     = normCSV(r[idx.desc]);
+    const lote     = idx.lote >= 0 ? normCSV(r[idx.lote]) : "";
+    const cantRaw  = idx.cant >= 0 ? normCSV(r[idx.cant]) : "";
+    const tipoRaw  = idx.tipo >= 0 ? normCSV(r[idx.tipo]) : "";
 
     if(cajaText){
       let cod, nom;
-      const idx = cajaText.indexOf("-");
-      if(idx >= 0){ cod = cajaText.slice(0, idx).trim(); nom = cajaText.slice(idx+1).trim(); }
+      const idxDash = cajaText.indexOf("-");
+      if(idxDash >= 0){ cod = cajaText.slice(0, idxDash).trim(); nom = cajaText.slice(idxDash+1).trim(); }
       else { cod = ""; nom = cajaText; }
       const base = (cod || nom || ("caja"+cajas.length)).replace(/[^a-zA-Z0-9]/g, "_");
       current = { id: "caja_gs_"+cajas.length+"_"+base, codigo: cod, nombre: nom, sistema: "", items: [] };
@@ -1679,7 +1703,7 @@ function parseCajasDesdeCSV(rows){
     }
     current.items.push({
       codigo, nombre: desc, lote, cantidad,
-      tipo: TIPO_MAP[tipoRaw] || (tipoRaw || "")
+      tipo: TIPO_MAP[tipoRaw.toLowerCase()] || (tipoRaw || "")
     });
   }
   return cajas;
