@@ -1058,8 +1058,15 @@ tr.drag-over td { background: var(--accent-l) !important; border-top: 2px solid 
     <input class="form-input" type="date" id="f-fecha">
   </div>
   <div class="form-field" id="campo-fecha-nec-inst">
-    <label class="form-label">Fecha estimada de necesidad <span style="color:var(--err-text)">*</span></label>
-    <input class="form-input" type="date" id="f-fecha-estimada">
+    <label class="form-label">Necesidad <span style="color:var(--err-text)">*</span></label>
+    <select class="form-select" id="f-necesidad">
+      <option value="">— seleccionar —</option>
+      <option value="fria">Caja fría (plazo: 3-7 días)</option>
+      <option value="caliente">Caja caliente (plazo: 1-2 días)</option>
+      <option value="urgente_15">Caja urgente (antes de las 15:00)</option>
+      <option value="urgente_17">Caja urgente (antes de las 17:00)</option>
+      <option value="urgente_asap">Caja urgente (lo antes posible)</option>
+    </select>
   </div>
 </div>
       <!-- BLOQUE CAJA NUEVA -->
@@ -1245,12 +1252,14 @@ tr.drag-over td { background: var(--accent-l) !important; border-top: 2px solid 
   </select>
   <input id="filtro-cajas-resp" type="text" placeholder="Responsable…"
     class="toolbar-input" style="width:160px" oninput="S.render()">
-  <span style="display:flex;align-items:center;gap:4px;font-size:10px;color:var(--text-2);white-space:nowrap">
-    Necesidad
-    <input id="filtro-cajas-nec-desde" type="date" class="toolbar-input" style="width:128px" onchange="S.render()" title="Fecha de necesidad desde">
-    <span style="color:var(--text-3)">→</span>
-    <input id="filtro-cajas-nec-hasta" type="date" class="toolbar-input" style="width:128px" onchange="S.render()" title="Fecha de necesidad hasta">
-  </span>
+  <select id="filtro-cajas-necesidad" class="toolbar-select" style="width:190px" onchange="S.render()">
+    <option value="">Necesidad (todas)</option>
+    <option value="fria">Caja fría</option>
+    <option value="caliente">Caja caliente</option>
+    <option value="urgente_15">Caja urgente (antes 15:00)</option>
+    <option value="urgente_17">Caja urgente (antes 17:00)</option>
+    <option value="urgente_asap">Caja urgente (lo antes posible)</option>
+  </select>
   <div class="spacer"></div>
   <button class="btn btn-light btn-sm" onclick="imprimirSolo('page-seguimiento')">↓ PDF completo</button>
   <button class="btn btn-light btn-sm" onclick="imprimirSolo('seg-cajas')">↓ PDF cajas</button>
@@ -1290,12 +1299,14 @@ tr.drag-over td { background: var(--accent-l) !important; border-top: 2px solid 
   </select>
   <input id="filtro-inst-resp" type="text" placeholder="Responsable…"
     class="toolbar-input" style="width:160px" oninput="S.render()">
-  <span style="display:flex;align-items:center;gap:4px;font-size:10px;color:var(--text-2);white-space:nowrap">
-    Necesidad
-    <input id="filtro-inst-nec-desde" type="date" class="toolbar-input" style="width:128px" onchange="S.render()" title="Fecha de necesidad desde">
-    <span style="color:var(--text-3)">→</span>
-    <input id="filtro-inst-nec-hasta" type="date" class="toolbar-input" style="width:128px" onchange="S.render()" title="Fecha de necesidad hasta">
-  </span>
+  <select id="filtro-inst-necesidad" class="toolbar-select" style="width:190px" onchange="S.render()">
+    <option value="">Necesidad (todas)</option>
+    <option value="fria">Instrumental frío</option>
+    <option value="caliente">Instrumental caliente</option>
+    <option value="urgente_15">Instrumental urgente (antes 15:00)</option>
+    <option value="urgente_17">Instrumental urgente (antes 17:00)</option>
+    <option value="urgente_asap">Instrumental urgente (lo antes posible)</option>
+  </select>
   <div class="spacer"></div>
   <button class="btn btn-light btn-sm" onclick="imprimirSolo('page-seguimiento')">↓ PDF completo</button>
   <button class="btn btn-light btn-sm" onclick="imprimirSolo('seg-instrumentales')">↓ PDF instrumentales</button>
@@ -1484,6 +1495,7 @@ tr.drag-over td { background: var(--accent-l) !important; border-top: 2px solid 
     <div class="modal-body" id="modal-seg-body"></div>
     <div class="modal-footer">
       <button class="btn btn-danger" onclick="eliminarPedido()">Anular pedido</button>
+      <button class="btn btn-danger" id="btn-borrar-pedido" onclick="borrarPedidoDefinitivo()" style="display:none">Borrar</button>
       <div style="flex:1"></div>
       <button class="btn btn-light" onclick="closeModalSegBtn()">Cerrar</button>
       <button class="btn btn-ok" onclick="saveModalSeg()">Guardar cambios</button>
@@ -1967,7 +1979,7 @@ function guardarDraftTipo(){
     condicion: document.getElementById("f-condicion").value,
     responsable: document.getElementById("f-responsable").value,
     fecha: document.getElementById("f-fecha")?.value || "",
-    fechaEstimada: document.getElementById("f-fecha-estimada")?.value || "",
+    necesidad: document.getElementById("f-necesidad")?.value || "",
     codigoExistente: document.getElementById("f-codigo-existente").value,
     codigoNuevo: document.getElementById("f-codigo-nuevo").value,
     descNuevo: document.getElementById("f-descripcion-nuevo").value,
@@ -1981,7 +1993,7 @@ function restaurarDraftTipo(tipo){
   document.getElementById("f-condicion").value = d.condicion || "";
   document.getElementById("f-responsable").value = d.responsable || "";
   if(document.getElementById("f-fecha")) document.getElementById("f-fecha").value = d.fecha || new Date().toISOString().slice(0,10);
-  if(document.getElementById("f-fecha-estimada")) document.getElementById("f-fecha-estimada").value = d.fechaEstimada || "";
+  poblarSelectNecesidad(document.getElementById("f-necesidad"), tipo, d.necesidad || "");
 
   document.getElementById("f-codigo-existente").value = d.codigoExistente || "";
   document.getElementById("f-codigo-nuevo").value = d.codigoNuevo || "";
@@ -1989,6 +2001,64 @@ function restaurarDraftTipo(tipo){
 
   document.getElementById("tbody-caja-detalle").innerHTML = d.tbodyCaja || "";
   document.getElementById("tbody-inst-detalle").innerHTML = d.tbodyInst || "";
+}
+
+/* ── NECESIDAD (urgencia del pedido) ────────────────────────
+   Reemplaza a la antigua "fecha estimada de necesidad" (fechaEstimada, date).
+   Pedidos nuevos guardan ped.necesidad = uno de los value de abajo.
+   Pedidos anteriores al cambio conservan ped.fechaEstimada (fecha real) como
+   fallback, para no perder el dato histórico. */
+const NECESIDAD_DEFS = [
+  { value: "fria",         plazoDias: 7, corto: "Fría",          label: tipo => (tipo==="instrumental" ? "Instrumental frío" : "Caja fría") + " (plazo: 3-7 días)" },
+  { value: "caliente",     plazoDias: 2, corto: "Caliente",      label: tipo => (tipo==="instrumental" ? "Instrumental caliente" : "Caja caliente") + " (plazo: 1-2 días)" },
+  { value: "urgente_15",   plazoDias: 0, corto: "Urgente 15hs",  label: tipo => (tipo==="instrumental" ? "Instrumental urgente" : "Caja urgente") + " (antes de las 15:00)" },
+  { value: "urgente_17",   plazoDias: 0, corto: "Urgente 17hs",  label: tipo => (tipo==="instrumental" ? "Instrumental urgente" : "Caja urgente") + " (antes de las 17:00)" },
+  { value: "urgente_asap", plazoDias: 0, corto: "Urgente YA",    label: tipo => (tipo==="instrumental" ? "Instrumental urgente" : "Caja urgente") + " (lo antes posible)" }
+];
+
+function necesidadDef(value){ return NECESIDAD_DEFS.find(d=>d.value===value) || null; }
+function necesidadLabel(tipo, value){ const d = necesidadDef(value); return d ? d.label(tipo) : ""; }
+function necesidadCorto(value){ const d = necesidadDef(value); return d ? d.corto : "—"; }
+function necesidadBadgeClass(value){
+  if(value==="fria") return "badge-neu";
+  if(value==="caliente") return "badge-warn";
+  if(value && value.indexOf("urgente")===0) return "badge-err";
+  return "badge-neu";
+}
+function necesidadPrioridad(value){
+  return NECESIDAD_DEFS.findIndex(d=>d.value===value); // -1 si no tiene necesidad cargada
+}
+function poblarSelectNecesidad(selectEl, tipo, valorActual){
+  if(!selectEl) return;
+  selectEl.innerHTML = '<option value="">— seleccionar —</option>' +
+    NECESIDAD_DEFS.map(d=>`<option value="${d.value}">${esc(d.label(tipo))}</option>`).join("");
+  selectEl.value = valorActual || "";
+}
+function esFechaValida(s){ return typeof s === "string" && /^\d{4}-\d{2}-\d{2}$/.test(s); }
+
+// Fecha límite implícita a partir de la necesidad + fecha del pedido, para KPIs de vencimiento.
+// Si el pedido es anterior al cambio (sin ped.necesidad) usa la fechaEstimada real que tenía cargada.
+function fechaLimiteNecesidad(ped){
+  if(ped.necesidad && ped.fecha){
+    const d = necesidadDef(ped.necesidad);
+    if(d){
+      const base = new Date(ped.fecha + "T00:00:00");
+      base.setDate(base.getDate() + d.plazoDias);
+      return base.toISOString().slice(0,10);
+    }
+  }
+  if(esFechaValida(ped.fechaEstimada)) return ped.fechaEstimada;
+  return "";
+}
+
+function chipNecesidad(ped){
+  if(ped.necesidad){
+    const cls = necesidadBadgeClass(ped.necesidad);
+    return `<span class="badge ${cls}" style="font-size:10px" title="${esc(necesidadLabel(ped.tipo, ped.necesidad))}">${esc(necesidadCorto(ped.necesidad))}</span>`;
+  }
+  // Pedido anterior al cambio: todavía tiene una fecha real cargada
+  if(esFechaValida(ped.fechaEstimada)) return chipSemaforo(ped.fechaEstimada);
+  return `<span class="info-chip">—</span>`;
 }
 
 function setTipo(tipo){
@@ -2011,7 +2081,7 @@ function setTipo(tipo){
   document.getElementById("campo-fecha-inst").style.display = "";
   document.getElementById("campo-fecha-nec-inst").style.display = "";
 
-  restaurarDraftTipo(tipo);
+  restaurarDraftTipo(tipo); // repuebla f-necesidad con la redacción correcta (caja/instrumental)
 
   if(esCaja){
     document.getElementById("detalle-caja").style.display = "";
@@ -2422,12 +2492,12 @@ async function enviarPedido(){
   const condicion = tipoPedido==="instrumental" ? "nuevo" : document.getElementById("f-condicion").value;
   const responsable = document.getElementById("f-responsable").value.trim();
   const fecha = document.getElementById("f-fecha")?.value || "";
-  const fechaEstimada = document.getElementById("f-fecha-estimada")?.value || "";
+  const necesidad = document.getElementById("f-necesidad")?.value || "";
 
   if(tipoPedido==="caja" && !condicion){ alert("Indicá la condición del pedido."); return; }
   if(!responsable){ alert("Ingresá el responsable del pedido."); return; }
   if(!fecha){ alert("Ingresá la fecha del pedido."); return; }
-  if(!fechaEstimada){ alert("Ingresá la fecha estimada de necesidad."); return; }
+  if(!necesidad){ alert("Indicá la necesidad del pedido."); return; }
 
   let descripcion = "", codigo = "", provision = "nacional", ubicacion = "";
   const esExistente = condicion==="existente";
@@ -2523,10 +2593,10 @@ async function enviarPedido(){
     responsable,
     mailResponsable: sesionActual?.mail || "",
     fecha,
-    fechaEstimada,
+    necesidad,
     items,
     steps: {},
-    historialFechaNecesidad: [],
+    historialNecesidad: [],
     createdAt: Date.now()
   };
 
@@ -2555,8 +2625,7 @@ function limpiarFormulario(){
 
   document.getElementById("f-condicion").value="";
   poblarSelectResponsable();
-  const feEl=document.getElementById("f-fecha-estimada");
-  if(feEl) feEl.value="";
+  poblarSelectNecesidad(document.getElementById("f-necesidad"), tipoActual, "");
   const fEl=document.getElementById("f-fecha");
   if(fEl) fEl.value=new Date().toISOString().slice(0,10);
 
@@ -2647,8 +2716,8 @@ function calcularProgresoPedido(ped){
 }
 
 function estaVencido(ped){
-  // Para cajas: usa fechaEstimada (NEC). Para instrumentales: usa fechaEntregaEstimada (EST).
-  const fechaRef = ped.fechaEntregaEstimada || ped.fechaEstimada;
+  // Usa fechaEntregaEstimada (EST) si está cargada; si no, la fecha límite implícita por necesidad (NEC).
+  const fechaRef = ped.fechaEntregaEstimada || fechaLimiteNecesidad(ped);
   if(!fechaRef) return false;
   if(calcularProgresoPedido(ped) >= 100) return false;
 
@@ -2694,7 +2763,7 @@ function renderKpisSeguimiento(){
 
   // Por vencer: fecha NEC o EST entre hoy y 15 días
   const porVencer = p => {
-    const fechaRef = p.fechaEntregaEstimada || p.fechaEstimada;
+    const fechaRef = p.fechaEntregaEstimada || fechaLimiteNecesidad(p);
     if(!fechaRef || calcPct(p) >= 100) return false;
     const hoy = new Date(); hoy.setHours(0,0,0,0);
     const f = new Date(fechaRef + "T00:00:00");
@@ -2958,7 +3027,7 @@ function renderFechasPedido(ped){
     </div>
     <div style="margin-top:3px">
       <span style="font-size:10px;color:var(--text-3);font-weight:700">NEC</span>
-      ${chipSemaforo(ped.fechaEstimada)}
+      ${chipNecesidad(ped)}
     </div>
     <div style="margin-top:3px">
       <span style="font-size:10px;color:var(--text-3);font-weight:700">EST</span>
@@ -2992,10 +3061,8 @@ const S = {
     const filtOr  = origEl?.value || "";
 const respEl = document.getElementById(esCajas ? "filtro-cajas-resp" : "filtro-inst-resp");
 const filtResp = (respEl?.value || "").toLowerCase().trim();
-const necDesdeEl = document.getElementById(esCajas ? "filtro-cajas-nec-desde" : "filtro-inst-nec-desde");
-const necHastaEl = document.getElementById(esCajas ? "filtro-cajas-nec-hasta" : "filtro-inst-nec-hasta");
-const filtNecDesde = necDesdeEl?.value || "";
-const filtNecHasta = necHastaEl?.value || "";
+const necEl = document.getElementById(esCajas ? "filtro-cajas-necesidad" : "filtro-inst-necesidad");
+const filtNecesidad = necEl?.value || "";
 
 
     // Separar completados y no completados
@@ -3008,21 +3075,15 @@ const filtNecHasta = necHastaEl?.value || "";
     const matchEst = (ped, fe) => !fe || (fe==="completo" ? calcPct(ped)>=100 : calcPct(ped)<100);
     const matchOr  = (ped, fo) => !fo || ped.origen === fo;
 const matchResp = (ped, fr) => !fr || (ped.responsable || "").toLowerCase().includes(fr);
-const matchNec = (ped, desde, hasta) => {
-  if(!desde && !hasta) return true;
-  if(!ped.fechaEstimada) return false;
-  if(desde && ped.fechaEstimada < desde) return false;
-  if(hasta && ped.fechaEstimada > hasta) return false;
-  return true;
-};
+const matchNec = (ped, necesidad) => !necesidad || ped.necesidad === necesidad;
 
-    let filtered = data.filter(p => matchQ(p,q) && matchEst(p,filtEst) && matchOr(p,filtOr) && matchResp(p,filtResp) && matchNec(p,filtNecDesde,filtNecHasta));
+    let filtered = data.filter(p => matchQ(p,q) && matchEst(p,filtEst) && matchOr(p,filtOr) && matchResp(p,filtResp) && matchNec(p,filtNecesidad));
 
-    // Orden: abiertos por fecha de necesidad (más cercana a hoy primero), luego completados por ID desc, luego anulados por ID desc
+    // Orden: abiertos por urgencia (más urgente primero; pedidos sin necesidad cargada al final),
+    // luego completados por ID desc, luego anulados por ID desc
     const idNum = ped => parseInt((ped.id||"").replace(/\D/g,"")) || 0;
-    const necVal = ped => ped.fechaEstimada ? new Date(ped.fechaEstimada+"T00:00:00").getTime() : Infinity;
     if(!filtEst){
-      const abiertos2  = filtered.filter(p => !p.eliminado && calcPct(p) < 100).sort((a,b)=>necVal(a)-necVal(b));
+      const abiertos2  = filtered.filter(p => !p.eliminado && calcPct(p) < 100).sort((a,b)=>necesidadPrioridad(b.necesidad)-necesidadPrioridad(a.necesidad));
       const completados2 = filtered.filter(p => !p.eliminado && calcPct(p) >= 100).sort((a,b)=>idNum(b)-idNum(a));
       const anulados2  = filtered.filter(p => !!p.eliminado).sort((a,b)=>idNum(b)-idNum(a));
       filtered = [...abiertos2, ...completados2, ...anulados2];
@@ -3144,6 +3205,9 @@ function openModalSeg(ped, idx){
   document.getElementById("modal-seg-title").textContent = ped.descripcion || ped.id;
   document.getElementById("modal-seg-id").textContent = ped.id;
 
+  const btnBorrar = document.getElementById("btn-borrar-pedido");
+  if(btnBorrar) btnBorrar.style.display = tienePermiso("admin") ? "" : "none";
+
   // Calcular posición actual en la tabla (orden automático por fecha de necesidad)
   const tbId = ped.tipo==="caja" ? "tbody-seg-cajas" : "tbody-seg-inst";
   const trs = [...document.querySelectorAll(`#${tbId} tr`)];
@@ -3164,10 +3228,14 @@ function openModalSeg(ped, idx){
     <span style="font-size:11px;color:var(--text-3);font-family:var(--mono)">${fmtDate(ped.fecha)}</span>
     <span style="display:flex;align-items:center;gap:14px;margin-left:auto;flex-wrap:wrap">
       <span style="display:flex;align-items:center;gap:6px">
-        <label style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--text-3);white-space:nowrap">Fecha de necesidad</label>
-        <input type="date" id="modal-fecha-necesidad" value="${esc(ped.fechaEstimada||"")}" data-prev="${esc(ped.fechaEstimada||"")}"
-          style="font-family:var(--font);font-size:12px;border:1px solid var(--border);border-radius:3px;padding:3px 7px;outline:none;"
-          onchange="updateFechaNecesidad(this)">
+        <label style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--text-3);white-space:nowrap">Necesidad</label>
+        <select id="modal-necesidad" data-prev="${esc(ped.necesidad||"")}"
+          style="font-family:var(--font);font-size:12px;border:1px solid var(--border);border-radius:3px;padding:3px 7px;outline:none;appearance:none;-webkit-appearance:none;background-repeat:no-repeat;background-position:right 6px center;padding-right:22px;background-image:url(&quot;data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='9' height='6'%3E%3Cpath d='M0 0l4.5 6L9 0z' fill='%235A6470'/%3E%3C/svg%3E&quot;);"
+          onchange="updateNecesidad(this)">
+          <option value="">— seleccionar —</option>
+          ${NECESIDAD_DEFS.map(d=>`<option value="${d.value}"${ped.necesidad===d.value?" selected":""}>${esc(d.label(ped.tipo))}</option>`).join("")}
+        </select>
+        ${(!ped.necesidad && esFechaValida(ped.fechaEstimada)) ? `<span style="font-size:9px;color:var(--text-3)" title="Pedido anterior al cambio de campo, conserva su fecha de necesidad original">(antes: ${fmtDate(ped.fechaEstimada)})</span>` : ""}
       </span>
       <span style="display:flex;align-items:center;gap:6px">
         <label style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--text-3);white-space:nowrap">Fecha estimada de entrega</label>
@@ -3178,11 +3246,11 @@ function openModalSeg(ped, idx){
     </span>
   </div>
   ${(()=>{
-    const hist = [...(ped.historialFechaNecesidad||[])];
+    const hist = [...(ped.historialNecesidad||[])];
     if(!hist.length) return "";
     const ultimos = hist.slice(-5).reverse();
     const rows = ultimos.map(h=>{
-      const deA = `<span style="font-family:var(--mono);font-size:10px;background:var(--accent-l);color:var(--accent-d);border-radius:3px;padding:1px 5px;white-space:nowrap">${h.de?fmtDate(h.de):"—"} → ${h.a?fmtDate(h.a):"—"}</span>`;
+      const deA = `<span style="font-family:var(--mono);font-size:10px;background:var(--accent-l);color:var(--accent-d);border-radius:3px;padding:1px 5px;white-space:nowrap">${h.de?esc(necesidadCorto(h.de)):"—"} → ${h.a?esc(necesidadCorto(h.a)):"—"}</span>`;
       return `<div style="display:flex;gap:8px;align-items:baseline;font-size:10px;padding:4px 0;border-bottom:1px solid var(--border)">
         <span style="font-family:var(--mono);color:var(--text-3);white-space:nowrap">${fmtDate((h.fecha||"").slice(0,10))}</span>
         ${deA}
@@ -3191,7 +3259,7 @@ function openModalSeg(ped, idx){
       </div>`;
     }).join("");
     return `<div style="margin-bottom:14px;padding:8px 10px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius)">
-      <div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--text-3);margin-bottom:4px">Historial de cambios de fecha de necesidad</div>
+      <div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--text-3);margin-bottom:4px">Historial de cambios de necesidad</div>
       ${rows}
     </div>`;
   })()}`;
@@ -3311,7 +3379,7 @@ if(ped.eliminado){
     const isDone = !!sd.done;
     // For "Fecha estimada de entrega" step: pre-fill from fechaEntregaEstimada (inst) o fechaEstimada (cajas)
     const isFechaEst = step === "Fecha estimada de entrega";
-    const fechaRefStep = ped.tipo==="instrumental" ? (ped.fechaEntregaEstimada||ped.fechaEstimada) : ped.fechaEstimada;
+    const fechaRefStep = ped.fechaEntregaEstimada || (esFechaValida(ped.fechaEstimada) ? ped.fechaEstimada : "");
     const stepDateVal = isFechaEst && !sd.fecha && fechaRefStep ? fechaRefStep : (sd.fecha||"");
     html += `<div class="checklist-step${isDone?" step-done":""}" id="cstep-${si}">
       <input type="checkbox" class="step-check" ${isDone?"checked":""} onchange="toggleStep(${si},this)">
@@ -3359,37 +3427,37 @@ function registrarEdicion(ped){
   };
 }
 
-function updateFechaNecesidad(inputEl){
+function updateNecesidad(selectEl){
   if(!modalPedidoId) return;
   const { tipo, idx } = modalPedidoId;
   const ped = tipo==="caja" ? seguimientoCajas[idx] : seguimientoInst[idx];
   if(!ped) return;
 
-  const prev = inputEl.dataset.prev || "";
-  const val = inputEl.value;
+  const prev = selectEl.dataset.prev || "";
+  const val = selectEl.value;
   if(val === prev) return;
 
   pedirMotivo(
-    "Cambio de fecha de necesidad",
-    `Cambiás la fecha de necesidad de "${ped.descripcion||ped.id}" de ${prev?fmtDate(prev):"—"} a ${val?fmtDate(val):"—"}. ¿Por qué cambiás la fecha de necesidad?`,
+    "Cambio de necesidad",
+    `Cambiás la necesidad de "${ped.descripcion||ped.id}" de ${prev?necesidadCorto(prev):"—"} a ${val?necesidadCorto(val):"—"}. ¿Por qué cambiás la necesidad?`,
     (motivo)=>{
-      ped.fechaEstimada = val;
-      ped.historialFechaNecesidad = ped.historialFechaNecesidad || [];
-      ped.historialFechaNecesidad.push({
+      ped.necesidad = val;
+      ped.historialNecesidad = ped.historialNecesidad || [];
+      ped.historialNecesidad.push({
         fecha: new Date().toISOString(),
         usuario: sesionActual?.nombre || "",
         motivo,
         de: prev || null,
         a: val || null
       });
-      inputEl.dataset.prev = val;
+      selectEl.dataset.prev = val;
 
       registrarEdicion(ped);
       S.save(true);
       S.render();
       openModalSeg(ped, idx);
     },
-    ()=>{ inputEl.value = prev; }
+    ()=>{ selectEl.value = prev; }
   );
 }
 
@@ -3684,6 +3752,32 @@ function eliminarPedido(){
       showToast("Pedido anulado", "var(--err-text)");
     }
   );
+}
+
+function borrarPedidoDefinitivo(){
+  if(!tienePermiso("admin")) return;
+  if(!modalPedidoId) return;
+
+  const { tipo, idx } = modalPedidoId;
+  const arr = tipo==="caja" ? seguimientoCajas : seguimientoInst;
+  const ped = arr[idx];
+  if(!ped) return;
+
+  const pass = prompt(`Ingresá la contraseña de administrador para borrar definitivamente el pedido ${ped.id}:`);
+  if(pass === null) return; // canceló
+  if(pass !== "2026"){
+    alert("Contraseña incorrecta.");
+    return;
+  }
+
+  if(!confirm(`Esta acción borra el pedido ${ped.id} de forma DEFINITIVA (no se puede deshacer, a diferencia de "Anular"). ¿Confirmás?`)) return;
+
+  arr.splice(idx, 1);
+
+  S.save(true);
+  S.render();
+  closeModalSegBtn();
+  showToast("Pedido borrado definitivamente", "var(--err-text)");
 }
 
 
@@ -4290,7 +4384,7 @@ async function mailPedidoNuevo(ped){
         provision_label: provLabel,
         responsable:     ped.responsable || "—",
         fecha:           fmtDate(ped.fecha),
-        fecha_estimada:  ped.fechaEstimada ? fmtDate(ped.fechaEstimada) : "No especificada",
+        fecha_estimada:  ped.necesidad ? necesidadLabel(ped.tipo, ped.necesidad) : (esFechaValida(ped.fechaEstimada) ? fmtDate(ped.fechaEstimada) : "No especificada"),
         modifs:          modifsTxt
       };
       await emailjs.send(EJS_SERVICE, EJS_TPL_NEW, params);
@@ -4630,6 +4724,7 @@ function aplicarPermisos(){
   const modal = document.getElementById("modal-seg");
   if(modal){
     modal.querySelectorAll("input, select, textarea, button").forEach(el=>{
+      if(el.id === "btn-borrar-pedido") return; // se controla aparte, solo admin
       const esCerrar = (el.textContent || "").includes("Cerrar");
       const esPDF = (el.textContent || "").includes("PDF");
       const esConformidad = el.classList.contains("conformidad-btn");
@@ -4639,6 +4734,12 @@ function aplicarPermisos(){
         el.disabled = !puedeSeguimiento && !esCerrar && !esPDF;
       }
     });
+  }
+
+  const btnBorrarPedido = document.getElementById("btn-borrar-pedido");
+  if(btnBorrarPedido){
+    btnBorrarPedido.style.display = puedeAdmin ? "" : "none";
+    btnBorrarPedido.disabled = false;
   }
 
   // Usuarios solo si tiene admin
