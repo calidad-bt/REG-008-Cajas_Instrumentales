@@ -658,6 +658,7 @@ tr.drag-over td { background: var(--accent-l) !important; border-top: 2px solid 
   color: var(--accent); font-weight: 600; cursor: pointer;
   text-decoration: underline; font-size: 11px;
 }
+.inst-caja { font-family: var(--mono); font-size: 11px; }
 
 .kpi-grid{
   display:grid;
@@ -915,6 +916,12 @@ tr.drag-over td { background: var(--accent-l) !important; border-top: 2px solid 
   /* Tablas genéricas -> permitir scroll horizontal más compacto */
   .tbl-wrap{ -webkit-overflow-scrolling:touch; }
   .tbl th, .tbl td{ font-size:11px; padding:5px 6px; }
+
+  /* Los inputs/textareas editables dentro de tablas SIEMPRE en 16px+ en mobile:
+     por debajo de 16px, iOS/Android hacen auto-zoom al enfocar el campo, y eso
+     descoloca los dropdowns de autocompletado (position:fixed calculado antes
+     del zoom) haciendo que parezca que "no aparecen" las sugerencias. */
+  .tbl td .ti, .tbl td .cta, .tbl td input[type="number"] { font-size:16px; }
 
   /* Tablas marcadas como mobile-cards (maestro instrumentales, ítems de caja,
      registro de seguimiento) -> tarjetas apiladas en vez de tabla angosta */
@@ -2388,6 +2395,21 @@ function acClose(inputEl){
   if(dd) setTimeout(()=>{ dd.classList.remove("open"); dd.style.display="none"; }, 150);
 }
 
+// Reposiciona los dropdowns abiertos si cambia el viewport (ej: zoom automático de iOS/Android
+// al enfocar un input, o aparición del teclado virtual), para que no queden desalineados.
+function acRepositionOpen(){
+  document.querySelectorAll(".ac-dropdown.open").forEach(dd=>{
+    const inputEl = dd.closest(".ac-wrap")?.querySelector(".ti");
+    if(!inputEl) return;
+    const rect = inputEl.getBoundingClientRect();
+    dd.style.top  = (rect.bottom + 2) + "px";
+    dd.style.left = rect.left + "px";
+    dd.style.width = Math.max(rect.width, 280) + "px";
+  });
+}
+window.addEventListener("resize", acRepositionOpen);
+if(window.visualViewport) window.visualViewport.addEventListener("resize", acRepositionOpen);
+
 function acBuildCaja(inputEl){
   const q = (inputEl.value||"").toLowerCase().trim();
   const dd = inputEl.closest(".ac-wrap")?.querySelector(".ac-dropdown");
@@ -2443,7 +2465,7 @@ function addInstrumental(){
     <td style="min-width:110px">
       <div class="ac-wrap">
         <input class="ti inst-caja" type="text" placeholder="Cód. caja…"
-          oninput="acBuildCaja(this)" onblur="acClose(this)" autocomplete="off" style="font-family:var(--mono);font-size:11px">
+          oninput="acBuildCaja(this)" onblur="acClose(this)" autocomplete="off">
         <div class="ac-dropdown"></div>
       </div>
     </td>
