@@ -4441,43 +4441,87 @@ function forzarRecargaMaestrosDesdeExcel(){
 
 /* ═══════════════════════════════════════════════════════════
    EMAIL — EmailJS
+   2 plantillas:
+   - Pedido Nuevo: cajas + instrumentales
+   - Pedido Completo: cajas + instrumentales
 ═══════════════════════════════════════════════════════════ */
-const EJS_SERVICE  = "service_n8yyxst";
-const EJS_TPL_NEW  = "template_hlls6pn";  // pedido nuevo
-const EJS_TPL_DONE = "template_nm8v9zm";  // pedido completado
-const EJS_TPL_CANCEL = "template_REEMPLAZAR"; // pedido anulado — crear esta plantilla en EmailJS y reemplazar el ID
+const EJS_SERVICE       = "service_n8yyxst";
+const EJS_TPL_NUEVO     = "template_hlls6pn";  // Pedido Nuevo
+const EJS_TPL_COMPLETO  = "template_81d1k2m";  // Pedido Completo
+
+function detalleInstrumentalesMail(ped){
+  const items = (ped.items || []).filter(it =>
+    (it.nombre || "").trim() || (it.codigo || "").trim()
+  );
+
+  if(!items.length) return "Instrumental sin descripción";
+
+  return items.map(it => {
+    const cant = Number(it.cantidad || 1);
+    const nombre = (it.nombre || "Instrumental").trim();
+    const codigo = (it.codigo || "").trim();
+    const caja = (it.caja || "").trim();
+
+    let txt = `${Number.isFinite(cant) && cant > 0 ? cant : 1} × ${nombre}`;
+    if(codigo) txt += ` (${codigo})`;
+    if(caja) txt += ` · Caja ${caja}`;
+    return txt;
+  }).join(" | ");
+}
 
 async function mailPedidoNuevo(ped){
   try{
     await cargarUsuarios();
+
     const dests = usuariosDB
       .filter(u => (u.permisos||[]).includes("seguimiento") && u.mail && u.mail.includes("@"))
       .map(u => ({ nombre: u.nombre, mail: u.mail }));
-    if(!dests.length){ console.warn("Mail pedido nuevo: sin destinatarios con mail cargado."); return; }
 
-    const tipoLabel  = ped.tipo==="caja" ? "Caja" : "Instrumental";
-    const condLabel  = ped.condicion==="existente" ? "Reacondicionamiento" : "Nuevo";
-    const provLabel  = ped.provision==="importada" ? "Importada" : "Nacional";
-    const modifsTxt  = ped.modifs
-      ? `${ped.modifs} ítem${ped.modifs>1?"s":""} con cambios`
+    if(!dests.length){
+      console.warn("Mail pedido nuevo: sin destinatarios con mail cargado.");
+      return;
+    }
+
+    const responsableUsuario = usuariosDB.find(u =>
+      u.nombre === ped.responsable || u.usuario === ped.responsable
+    );
+    const replyMail = responsableUsuario?.mail || ped.mailResponsable || "";
+
+    const tipoLabel = ped.tipo === "caja" ? "Caja" : "Instrumental";
+    const condLabel = ped.condicion === "existente" ? "Reacondicionamiento" : "Nuevo";
+    const provLabel = ped.provision === "importada" ? "Importada" : "Nacional";
+    const modifsTxt = ped.modifs
+      ? `${ped.modifs} ítem${ped.modifs > 1 ? "s" : ""} con cambios`
       : "Sin modificaciones";
 
-    // EmailJS plan gratuito: un send por destinatario
+    let descripcionMail = ped.descripcion || "—";
+    let tipoMail = tipoLabel;
+
+    // Para instrumental NO manda "Pedido de instrumental":
+    // manda exactamente qué instrumental/es se pidieron.
+    if(ped.tipo === "instrumental"){
+      descripcionMail = detalleInstrumentalesMail(ped);
+      tipoMail = "Instrumental";
+    }
+
     for(const dest of dests){
-      const params = {
-        destinatarios:   dest.mail,
-        email:           dest.mail,   // necesario para {{email}} en Reply To
-        id:              ped.id,
-        tipo_label:      tipoLabel,
+      await emailjs.send(EJS_SERVICE, EJS_TPL_NUEVO, {
+        destinatarios: dest.mail,
+        email: replyMail || dest.mail,
+        id: ped.id,
+        tipo_label: tipoMail,
         condicion_label: condLabel,
-        descripcion:     ped.descripcion || "—",
+        descripcion: descripcionMail,
         provision_label: provLabel,
-        responsable:     ped.responsable || "—",
-        fecha:           fmtDate(ped.fecha),
-        fecha_estimada:  ped.necesidad ? necesidadLabel(ped.tipo, ped.necesidad) : (esFechaValida(ped.fechaEstimada) ? fmtDate(ped.fechaEstimada) : "No especificada"),
-        modifs:          modifsTxt
-      };
-      await emailjs.send(EJS_SERVICE, EJS_TPL_NEW, params);
+        responsable: ped.responsable || "—",
+        fecha: fmtDate(ped.fecha) || "—",
+        fecha_estimada:
+          ped.necesidad
+            ? necesidadLabel(ped.tipo, ped.necesidad)
+            : (esFechaValida(ped.fechaEstimada) ? fmtDate(ped.fechaEstimada) : "No especificada"),
+        modifs: ped.tipo === "caja" ? modifsTxt : ""
+      });
+
       console.log("Mail pedido nuevo enviado a:", dest.mail);
     }
   } catch(e){
@@ -4488,21 +4532,32 @@ async function mailPedidoNuevo(ped){
 async function mailPedidoCompleto(ped){
   try{
     await cargarUsuarios();
+
     const creador = usuariosDB.find(u =>
       u.nombre === ped.responsable || u.usuario === ped.responsable
     );
     const mailDest = creador?.mail || ped.mailResponsable || "";
-    if(!mailDest || !mailDest.includes("@")){ console.warn("Mail pedido completo: sin mail del responsable."); return; }
 
-    const params = {
-      destinatarios:   mailDest,
-      email:           mailDest,
-      id:              ped.id,
-      descripcion:     ped.descripcion || "—",
-      fecha_completado:fmtDate(ped.completadoAt || new Date().toISOString().slice(0,10))
-    };
+    if(!mailDest || !mailDest.includes("@")){
+      console.warn("Mail pedido completo: sin mail del responsable.");
+      return;
+    }
 
-    await emailjs.send(EJS_SERVICE, EJS_TPL_DONE, params);
+    let descripcionMail = ped.descripcion || "—";
+
+    // En completado, si es instrumental también conviene mostrar qué fue.
+    if(ped.tipo === "instrumental"){
+      descripcionMail = detalleInstrumentalesMail(ped);
+    }
+
+    await emailjs.send(EJS_SERVICE, EJS_TPL_COMPLETO, {
+      destinatarios: mailDest,
+      email: mailDest,
+      id: ped.id,
+      descripcion: descripcionMail,
+      fecha_completado: fmtDate(ped.completadoAt || new Date().toISOString().slice(0,10))
+    });
+
     console.log("Mail pedido completo enviado a:", mailDest);
   } catch(e){
     console.warn("Error enviando mail pedido completo:", e);
@@ -4510,36 +4565,9 @@ async function mailPedidoCompleto(ped){
 }
 
 async function mailPedidoAnulado(ped){
-  try{
-    await cargarUsuarios();
-    // Notifica al responsable del pedido y también al equipo de seguimiento
-    const creador = usuariosDB.find(u =>
-      u.nombre === ped.responsable || u.usuario === ped.responsable
-    );
-    const dests = new Map();
-    const mailResp = creador?.mail || ped.mailResponsable || "";
-    if(mailResp && mailResp.includes("@")) dests.set(mailResp, true);
-    usuariosDB
-      .filter(u => (u.permisos||[]).includes("seguimiento") && u.mail && u.mail.includes("@"))
-      .forEach(u => dests.set(u.mail, true));
-
-    if(!dests.size){ console.warn("Mail pedido anulado: sin destinatarios con mail cargado."); return; }
-
-    for(const mailDest of dests.keys()){
-      const params = {
-        destinatarios:    mailDest,
-        email:            mailDest,
-        id:               ped.id,
-        descripcion:      ped.descripcion || "—",
-        motivo:           ped.eliminadoMotivo || "—",
-        fecha_anulacion:  fmtDate((ped.eliminadoAt || "").slice(0,10))
-      };
-      await emailjs.send(EJS_SERVICE, EJS_TPL_CANCEL, params);
-      console.log("Mail pedido anulado enviado a:", mailDest);
-    }
-  } catch(e){
-    console.warn("Error enviando mail pedido anulado:", e);
-  }
+  // Se mantiene sin plantilla separada.
+  // Si querés más adelante, podemos reutilizar Pedido Nuevo o agregar una tercera.
+  console.log("Pedido anulado:", ped.id);
 }
 
 /* ── INIT ────────────────────────────────────────────────── */
