@@ -1877,16 +1877,17 @@ if(rSeg && Array.isArray(rSeg.cajas) && Array.isArray(rSeg.inst)){
   seguimientoInst  = rSeg.inst;
   lsSet(LS_SEG, rSeg);
 } else {
-  seguimientoCajas = [];
-  seguimientoInst  = [];
-
-  // Limpia copia local vieja
-  lsSet(LS_SEG, segVacio);
-
-  // Crea estructura correcta en Firebase automáticamente
-  try {
-    await fbSet(FB_SEG, segVacio);
-  } catch(e) {}
+  // rSeg vino null o con forma inesperada. Esto puede significar "todavía no hay
+  // nada cargado" (primer uso real) o un problema transitorio de lectura — no hay
+  // forma de saber cuál es desde acá, así que NUNCA escribimos a Firebase en este
+  // punto. Escribir automáticamente puede pisar datos reales que existen pero que
+  // por algún motivo no llegaron en esta lectura puntual (ya pasó: pisó pedidos
+  // reales con una estructura vacía). Si local tiene algo, lo usamos como red de
+  // seguridad; si no, mostramos vacío nomás. La próxima vez que alguien guarde un
+  // cambio real, la estructura correcta se crea sola en Firebase.
+  seguimientoCajas = lSeg.cajas || [];
+  seguimientoInst  = lSeg.inst  || [];
+  if(!rSeg) console.warn("REG-008: lectura de /cajas/seguimiento vino vacía (null). No se sobreescribe Firebase; se usa la copia local como respaldo.");
 }
 
     // Maestro instrumentales
@@ -3227,6 +3228,26 @@ if(isDeleted) return `<span class="badge badge-err" style="font-size:11px">Anula
   },
 
   async save(silent){
+    // Chequeo de concurrencia: antes de pisar todo el nodo, nos fijamos si alguien
+    // más ya guardó algo más nuevo que lo último que nosotros conocemos. Si es así,
+    // NO pisamos con nuestra copia (que quedaría desactualizada) — traemos lo nuevo,
+    // re-renderizamos y avisamos para que se repita la acción sobre datos frescos.
+    // Esto es lo que evita el escenario "se resucitan registros viejos / se pierde
+    // un pedido nuevo" cuando dos personas usan el sistema casi al mismo tiempo.
+    try{
+      const remote = await fbGet(FB_SEG);
+      const stored = lsGet(LS_SEG) || { ts: 0 };
+      if(remote && (remote.ts||0) > (stored.ts||0)){
+        seguimientoCajas = remote.cajas || [];
+        seguimientoInst  = remote.inst  || [];
+        lsSet(LS_SEG, remote);
+        this.render();
+        setSyncStatus("En vivo","sync-ok");
+        alert("Otra persona guardó cambios en este registro justo ahora. Se actualizó la información con lo más reciente — repetí la acción que estabas haciendo.");
+        return;
+      }
+    } catch(e){ /* si falla el chequeo, seguimos con el guardado normal más abajo */ }
+
     const pay = { cajas: seguimientoCajas, inst: seguimientoInst, ts: Date.now() };
     lsSet(LS_SEG, pay);
     try{
