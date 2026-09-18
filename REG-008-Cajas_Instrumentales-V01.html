@@ -2331,10 +2331,34 @@ function elimItemCaja(btn){
 }
 
 /* ── AUTOCOMPLETE HELPERS ────────────────────────────────── */
+// El dropdown de sugerencias se ancla a document.body (no dentro de la fila/tabla).
+// Motivo: en iOS Safari, un position:fixed que vive DENTRO de un contenedor con
+// scroll horizontal (.tbl-wrap, overflow-x:auto + -webkit-overflow-scrolling:touch)
+// queda "atrapado" dentro de ese contenedor y se recorta/oculta, aunque el CSS diga
+// fixed. Al vivir en <body>, el dropdown escapa a cualquier tabla con scroll.
+let acActiveInput = null;
+
+function acGetDropdown(){
+  let dd = document.getElementById("ac-shared-dropdown");
+  if(!dd){
+    dd = document.createElement("div");
+    dd.id = "ac-shared-dropdown";
+    dd.className = "ac-dropdown";
+    document.body.appendChild(dd);
+  }
+  return dd;
+}
+
+function acPositionDropdown(dd, inputEl){
+  const rect = inputEl.getBoundingClientRect();
+  dd.style.top   = (rect.bottom + 2) + "px";
+  dd.style.left  = rect.left + "px";
+  dd.style.width = Math.max(rect.width, 280) + "px";
+}
+
 function acBuild(inputEl, field){
-  const wrap = inputEl.closest(".ac-wrap"); if(!wrap) return;
-  let dd = wrap.querySelector(".ac-dropdown");
-  if(!dd){ dd = document.createElement("div"); dd.className="ac-dropdown"; wrap.appendChild(dd); }
+  const dd = acGetDropdown();
+  acActiveInput = inputEl;
 
   const q = inputEl.value.trim().toLowerCase();
   if(!q){ dd.classList.remove("open"); dd.style.display="none"; return; }
@@ -2346,7 +2370,7 @@ function acBuild(inputEl, field){
   }).slice(0,12);
 
   if(!matches.length){
-    dd.innerHTML=`<div class="ac-no-match">Sin resultados. <a onclick="showTab('page-maestro',document.querySelectorAll('nav a.tab-link')[2])">Ir al maestro</a></div>`;
+    dd.innerHTML=`<div class="ac-no-match">Sin resultados. <a onmousedown="event.preventDefault()" onclick="showTab('page-maestro',document.querySelectorAll('nav a.tab-link')[2])">Ir al maestro</a></div>`;
   } else {
     dd.innerHTML = matches.map((r,i)=>`
       <div class="ac-item" data-idx="${i}" data-codigo="${esc(r.codigo)}" data-nombre="${esc(r.nombre)}" onmousedown="acSelect(event,this)">
@@ -2355,18 +2379,14 @@ function acBuild(inputEl, field){
       </div>`).join("");
   }
 
-  // Position using fixed coords
-  const rect = inputEl.getBoundingClientRect();
+  acPositionDropdown(dd, inputEl);
   dd.style.display = "block";
-  dd.style.top  = (rect.bottom + 2) + "px";
-  dd.style.left = rect.left + "px";
-  dd.style.width = Math.max(rect.width, 280) + "px";
   dd.classList.add("open");
 }
 
 function acSelect(e, item){
   e.preventDefault();
-  const tr = item.closest("tr"); if(!tr) return;
+  const tr = acActiveInput?.closest("tr"); if(!tr) return;
   const codigo = item.dataset.codigo;
   const nombre = item.dataset.nombre;
 
@@ -2382,38 +2402,40 @@ function acSelect(e, item){
   if(codCajaInp) codCajaInp.value = codigo;
   if(nomCajaInp) nomCajaInp.value = nombre;
 
-  // Cerrar todos los dropdowns
-  document.querySelectorAll(".ac-dropdown").forEach(d=>{ d.classList.remove("open"); d.style.display="none"; });
+  acCloseNow();
 
   // Mover foco a cantidad
   const cantInp = tr.querySelector('input[type="number"]');
   if(cantInp) cantInp.focus();
 }
 
-function acClose(inputEl){
-  const dd = inputEl.closest(".ac-wrap")?.querySelector(".ac-dropdown");
-  if(dd) setTimeout(()=>{ dd.classList.remove("open"); dd.style.display="none"; }, 150);
+function acCloseNow(){
+  const dd = document.getElementById("ac-shared-dropdown");
+  if(dd){ dd.classList.remove("open"); dd.style.display="none"; }
+  acActiveInput = null;
 }
 
-// Reposiciona los dropdowns abiertos si cambia el viewport (ej: zoom automático de iOS/Android
-// al enfocar un input, o aparición del teclado virtual), para que no queden desalineados.
+function acClose(inputEl){
+  setTimeout(()=>{
+    if(acActiveInput === inputEl) acCloseNow();
+  }, 150);
+}
+
+// Reposiciona el dropdown si cambia el viewport mientras está abierto (ej: zoom
+// automático de iOS/Android al enfocar un input, o aparición del teclado virtual).
 function acRepositionOpen(){
-  document.querySelectorAll(".ac-dropdown.open").forEach(dd=>{
-    const inputEl = dd.closest(".ac-wrap")?.querySelector(".ti");
-    if(!inputEl) return;
-    const rect = inputEl.getBoundingClientRect();
-    dd.style.top  = (rect.bottom + 2) + "px";
-    dd.style.left = rect.left + "px";
-    dd.style.width = Math.max(rect.width, 280) + "px";
-  });
+  const dd = document.getElementById("ac-shared-dropdown");
+  if(!dd || !dd.classList.contains("open") || !acActiveInput) return;
+  acPositionDropdown(dd, acActiveInput);
 }
 window.addEventListener("resize", acRepositionOpen);
 if(window.visualViewport) window.visualViewport.addEventListener("resize", acRepositionOpen);
 
 function acBuildCaja(inputEl){
+  const dd = acGetDropdown();
+  acActiveInput = inputEl;
+
   const q = (inputEl.value||"").toLowerCase().trim();
-  const dd = inputEl.closest(".ac-wrap")?.querySelector(".ac-dropdown");
-  if(!dd) return;
   if(!q){ dd.classList.remove("open"); dd.style.display="none"; return; }
   const cajas = MC.getAll();
   const matches = cajas.filter(c=>
@@ -2427,15 +2449,16 @@ function acBuildCaja(inputEl){
       <span class="ac-item-codigo">${esc(c.codigo||"—")}</span>
       <span class="ac-item-nombre">${esc(c.nombre||"Sin nombre")}</span>
     </div>`).join("");
+  acPositionDropdown(dd, inputEl);
   dd.style.display="block"; dd.classList.add("open");
 }
 
 function acSelectCaja(e, item){
   e.preventDefault();
-  const tr = item.closest("tr"); if(!tr) return;
+  const tr = acActiveInput?.closest("tr"); if(!tr) return;
   const inp = tr.querySelector(".inst-caja");
   if(inp) inp.value = item.dataset.codigo || item.dataset.nombre || "";
-  document.querySelectorAll(".ac-dropdown").forEach(d=>{ d.classList.remove("open"); d.style.display="none"; });
+  acCloseNow();
 }
 
 
