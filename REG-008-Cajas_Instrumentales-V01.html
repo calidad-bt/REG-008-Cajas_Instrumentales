@@ -2651,7 +2651,7 @@ async function enviarPedido(){
   if(tipoPedido==="caja") seguimientoCajas.push(pedido);
   else seguimientoInst.push(pedido);
 
-  S.save(true);
+  await S.save(true);
   S.render();
 
   // Mandar mail a seguimiento (sin await para no bloquear la UI)
@@ -3228,32 +3228,56 @@ if(isDeleted) return `<span class="badge badge-err" style="font-size:11px">Anula
   },
 
   async save(silent){
-    // Chequeo de concurrencia: antes de pisar todo el nodo, nos fijamos si alguien
-    // más ya guardó algo más nuevo que lo último que nosotros conocemos. Si es así,
-    // NO pisamos con nuestra copia (que quedaría desactualizada) — traemos lo nuevo,
-    // re-renderizamos y avisamos para que se repita la acción sobre datos frescos.
-    // Esto es lo que evita el escenario "se resucitan registros viejos / se pierde
-    // un pedido nuevo" cuando dos personas usan el sistema casi al mismo tiempo.
-    try{
-      const remote = await fbGet(FB_SEG);
-      const stored = lsGet(LS_SEG) || { ts: 0 };
-      if(remote && (remote.ts||0) > (stored.ts||0)){
-        seguimientoCajas = remote.cajas || [];
-        seguimientoInst  = remote.inst  || [];
-        lsSet(LS_SEG, remote);
-        this.render();
-        setSyncStatus("En vivo","sync-ok");
-        alert("Otra persona guardó cambios en este registro justo ahora. Se actualizó la información con lo más reciente — repetí la acción que estabas haciendo.");
-        return;
+    // Guardado con compare-and-swap (ETag), igual mecanismo que ya usa genPedidoId()
+    // para el contador. A diferencia de la versión anterior, si detecta que alguien
+    // guardó justo antes (conflicto), NUNCA descarta los cambios locales pendientes:
+    // reintenta el mismo guardado sobre la base más reciente de Firebase. Esto es lo
+    // que evita perder un pedido recién agregado o un borrado recién hecho cuando dos
+    // personas usan el sistema casi al mismo tiempo.
+    const MAX_INTENTOS = 4;
+    for(let intento = 0; intento < MAX_INTENTOS; intento++){
+      let etag = null;
+      let leidoConEtag = true;
+      try{
+        const r = await fbGetWithEtag(FB_SEG);
+        etag = r.etag;
+      } catch(e){
+        leidoConEtag = false;
       }
-    } catch(e){ /* si falla el chequeo, seguimos con el guardado normal más abajo */ }
 
-    const pay = { cajas: seguimientoCajas, inst: seguimientoInst, ts: Date.now() };
-    lsSet(LS_SEG, pay);
-    try{
-      await fbSet(FB_SEG, pay);
-      setSyncStatus("En vivo","sync-ok");
-    } catch(e){ setSyncStatus("Sin conexión","sync-error"); }
+      const pay = { cajas: seguimientoCajas, inst: seguimientoInst, ts: Date.now() };
+
+      if(!leidoConEtag){
+        // Sin poder leer con ETag (ej: falló la conexión): guardado directo, sin CAS.
+        lsSet(LS_SEG, pay);
+        try{
+          await fbSet(FB_SEG, pay);
+          setSyncStatus("En vivo","sync-ok");
+        } catch(e2){ setSyncStatus("Sin conexión","sync-error"); }
+        break;
+      }
+
+      try{
+        await fbSetIfMatch(FB_SEG, pay, etag);
+        lsSet(LS_SEG, pay);
+        setSyncStatus("En vivo","sync-ok");
+        break;
+      } catch(e){
+        if(e.message === "CONFLICT" && intento < MAX_INTENTOS-1){
+          // Alguien guardó justo ahora: se reintenta con los mismos cambios locales
+          // sobre la base más reciente de Firebase, sin tirarlos.
+          continue;
+        }
+        // Se agotaron los reintentos u otro error: guardado directo como último
+        // recurso, preservando siempre los cambios locales.
+        try{
+          await fbSet(FB_SEG, pay);
+          lsSet(LS_SEG, pay);
+          setSyncStatus("En vivo","sync-ok");
+        } catch(e3){ setSyncStatus("Sin conexión","sync-error"); }
+        break;
+      }
+    }
     if(!silent){
   const panelInstActivo = document.getElementById("seg-instrumentales")?.classList.contains("active");
   setInlineSt(
@@ -3780,12 +3804,12 @@ function eliminarPedidoDirecto(e, idx, tipo){
   pedirMotivo(
     "Anular pedido",
     `Indicá el motivo de anulación de "${ped?.descripcion || ped?.id}":`,
-    (motivo)=>{
+    async (motivo)=>{
       ped.eliminado = true;
       ped.eliminadoAt = new Date().toISOString();
       ped.eliminadoMotivo = motivo;
 
-      S.save(true);
+      await S.save(true);
       S.render();
       mailPedidoAnulado(ped);
       showToast("Pedido anulado", "var(--err-text)");
@@ -3806,12 +3830,12 @@ function eliminarPedido(){
   pedirMotivo(
     "Anular pedido",
     `Indicá el motivo de anulación de "${ped?.descripcion || ped?.id}":`,
-    (motivo)=>{
+    async (motivo)=>{
       ped.eliminado = true;
       ped.eliminadoAt = new Date().toISOString();
       ped.eliminadoMotivo = motivo;
 
-      S.save(true);
+      await S.save(true);
       S.render();
       closeModalSegBtn();
       mailPedidoAnulado(ped);
@@ -3820,7 +3844,7 @@ function eliminarPedido(){
   );
 }
 
-function borrarPedidoDefinitivo(){
+async function borrarPedidoDefinitivo(){
   if(!tienePermiso("admin")) return;
   if(!modalPedidoId) return;
 
@@ -3840,7 +3864,7 @@ function borrarPedidoDefinitivo(){
 
   arr.splice(idx, 1);
 
-  S.save(true);
+  await S.save(true);
   S.render();
   closeModalSegBtn();
   showToast("Pedido borrado definitivamente", "var(--err-text)");
