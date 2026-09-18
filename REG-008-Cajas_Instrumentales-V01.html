@@ -3318,6 +3318,13 @@ function openModalSeg(ped, idx){
     <span style="font-size:11px;color:var(--text-3);font-family:var(--mono)">${fmtDate(ped.fecha)}</span>
     <span style="display:flex;align-items:center;gap:14px;margin-left:auto;flex-wrap:wrap">
       <span style="display:flex;align-items:center;gap:6px">
+        <input type="checkbox" id="modal-recibido" ${ped.recibido?"checked":""}
+          style="width:16px;height:16px;accent-color:var(--accent);cursor:pointer"
+          onchange="updateRecibido(this)">
+        <label for="modal-recibido"
+          style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--text-3);white-space:nowrap;cursor:pointer">Recibido</label>
+      </span>
+      <span style="display:flex;align-items:center;gap:6px">
         <label style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--text-3);white-space:nowrap">Necesidad</label>
         <select id="modal-necesidad" data-prev="${esc(ped.necesidad||"")}"
           style="font-family:var(--font);font-size:12px;border:1px solid var(--border);border-radius:3px;padding:3px 7px;outline:none;appearance:none;-webkit-appearance:none;background-repeat:no-repeat;background-position:right 6px center;padding-right:22px;background-image:url(&quot;data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='9' height='6'%3E%3Cpath d='M0 0l4.5 6L9 0z' fill='%235A6470'/%3E%3C/svg%3E&quot;);"
@@ -3517,7 +3524,39 @@ function registrarEdicion(ped){
   };
 }
 
+function updateRecibido(cb){
+  if(!tienePermiso("seguimiento")){
+    cb.checked = !cb.checked;
+    return;
+  }
+  if(!modalPedidoId) return;
+
+  const { tipo, idx } = modalPedidoId;
+  const ped = tipo==="caja" ? seguimientoCajas[idx] : seguimientoInst[idx];
+  if(!ped) return;
+
+  ped.recibido = !!cb.checked;
+
+  if(ped.recibido){
+    ped.recibidoAt = new Date().toISOString();
+    ped.recibidoPor = sesionActual?.nombre || "";
+  } else {
+    ped.recibidoAt = "";
+    ped.recibidoPor = "";
+  }
+
+  registrarEdicion(ped);
+  S.save(true);
+  S.render();
+}
+
 function updateNecesidad(selectEl){
+  // La necesidad puede modificarla quien tenga permiso de Formulario
+  // (como ocurría antes con la fecha de necesidad) o de Seguimiento.
+  if(!tienePermiso("formulario") && !tienePermiso("seguimiento")){
+    selectEl.value = selectEl.dataset.prev || "";
+    return;
+  }
   if(!modalPedidoId) return;
   const { tipo, idx } = modalPedidoId;
   const ped = tipo==="caja" ? seguimientoCajas[idx] : seguimientoInst[idx];
@@ -4846,8 +4885,18 @@ function aplicarPermisos(){
       const esCerrar = (el.textContent || "").includes("Cerrar");
       const esPDF = (el.textContent || "").includes("PDF");
       const esConformidad = el.classList.contains("conformidad-btn");
+      const esNecesidad = el.id === "modal-necesidad";
+      const esRecibido = el.id === "modal-recibido";
+
       if(esConformidad){
+        // Conformidad: la completa quien tiene permiso de formulario.
         el.disabled = !puedeFormulario;
+      } else if(esNecesidad){
+        // Necesidad: puede modificarla Formulario o Seguimiento.
+        el.disabled = !(puedeFormulario || puedeSeguimiento);
+      } else if(esRecibido){
+        // Recibido: exclusivo de Registro de seguimiento.
+        el.disabled = !puedeSeguimiento;
       } else {
         el.disabled = !puedeSeguimiento && !esCerrar && !esPDF;
       }
