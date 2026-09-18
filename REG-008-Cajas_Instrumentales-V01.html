@@ -1268,6 +1268,8 @@ tr.drag-over td { background: var(--accent-l) !important; border-top: 2px solid 
     <option value="urgente_asap">Caja urgente (lo antes posible)</option>
   </select>
   <div class="spacer"></div>
+  <button class="btn btn-primary btn-sm admin-add-pedido" style="display:none"
+    onclick="abrirModalAltaManual('caja')">＋ Agregar pedido</button>
   <button class="btn btn-light btn-sm" onclick="imprimirSolo('page-seguimiento')">↓ PDF completo</button>
   <button class="btn btn-light btn-sm" onclick="imprimirSolo('seg-cajas')">↓ PDF cajas</button>
   <button class="btn btn-ok btn-sm" onclick="S.save()">Guardar cambios</button>
@@ -1315,6 +1317,8 @@ tr.drag-over td { background: var(--accent-l) !important; border-top: 2px solid 
     <option value="urgente_asap">Instrumental urgente (lo antes posible)</option>
   </select>
   <div class="spacer"></div>
+  <button class="btn btn-primary btn-sm admin-add-pedido" style="display:none"
+    onclick="abrirModalAltaManual('instrumental')">＋ Agregar pedido</button>
   <button class="btn btn-light btn-sm" onclick="imprimirSolo('page-seguimiento')">↓ PDF completo</button>
   <button class="btn btn-light btn-sm" onclick="imprimirSolo('seg-instrumentales')">↓ PDF instrumentales</button>
   <button class="btn btn-ok btn-sm" onclick="S.save()">Guardar cambios</button>
@@ -1501,7 +1505,7 @@ tr.drag-over td { background: var(--accent-l) !important; border-top: 2px solid 
     </div>
     <div class="modal-body" id="modal-seg-body"></div>
     <div class="modal-footer">
-      <button class="btn btn-danger" onclick="eliminarPedido()">Anular pedido</button>
+      <button class="btn btn-danger" id="btn-anular-pedido" onclick="eliminarPedido()">Anular pedido</button>
       <button class="btn btn-danger" id="btn-borrar-pedido" onclick="borrarPedidoDefinitivo()" style="display:none">Borrar</button>
       <div style="flex:1"></div>
       <button class="btn btn-light" onclick="closeModalSegBtn()">Cerrar</button>
@@ -1531,6 +1535,110 @@ tr.drag-over td { background: var(--accent-l) !important; border-top: 2px solid 
       <div style="flex:1"></div>
       <button class="btn btn-light" onclick="cerrarModalMotivo(true)">Cancelar</button>
       <button class="btn btn-primary" onclick="cerrarModalMotivo(false)">Confirmar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════
+     MODAL ALTA MANUAL DE PEDIDO — SOLO ADMIN
+════════════════════════════════════════════════════════════ -->
+<div class="modal-overlay" id="modal-alta-manual"
+  onclick="if(event.target===this) cerrarModalAltaManual()">
+  <div class="modal" style="max-width:900px">
+    <div class="modal-header">
+      <span class="modal-title">Agregar pedido manualmente al registro</span>
+      <button class="modal-close" onclick="cerrarModalAltaManual()">×</button>
+    </div>
+
+    <div class="modal-body">
+      <div style="padding:8px 10px;margin-bottom:14px;background:var(--warn-bg);border:1px solid var(--warn-bd);border-radius:var(--radius);font-size:11px;color:var(--warn-text)">
+        Uso administrativo. Este alta no envía ningún mail y no reemplaza pedidos existentes.
+      </div>
+
+      <div class="form-grid-3">
+        <div class="form-field">
+          <label class="form-label">Tipo</label>
+          <select class="form-select" id="adm-ped-tipo" onchange="actualizarAltaManualTipo()">
+            <option value="caja">Caja</option>
+            <option value="instrumental">Instrumental</option>
+          </select>
+        </div>
+
+        <div class="form-field">
+          <label class="form-label">ID del pedido *</label>
+          <input class="form-input" id="adm-ped-id" type="text" placeholder="Ej: INS-003">
+        </div>
+
+        <div class="form-field">
+          <label class="form-label">Responsable *</label>
+          <select class="form-select" id="adm-ped-responsable"></select>
+        </div>
+      </div>
+
+      <div class="form-grid-3">
+        <div class="form-field">
+          <label class="form-label">Fecha del pedido *</label>
+          <input class="form-input" id="adm-ped-fecha" type="date">
+        </div>
+
+        <div class="form-field">
+          <label class="form-label">Necesidad *</label>
+          <select class="form-select" id="adm-ped-necesidad"></select>
+        </div>
+
+        <div class="form-field">
+          <label class="form-label">Provisión</label>
+          <select class="form-select" id="adm-ped-provision">
+            <option value="nacional">Nacional</option>
+            <option value="importada">Importada</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="form-grid">
+        <div class="form-field">
+          <label class="form-label">Descripción *</label>
+          <input class="form-input" id="adm-ped-descripcion" type="text"
+            placeholder="Ej: Pedido de instrumental">
+        </div>
+
+        <div class="form-field" id="adm-campo-condicion">
+          <label class="form-label">Condición</label>
+          <select class="form-select" id="adm-ped-condicion">
+            <option value="nuevo">Nuevo</option>
+            <option value="existente">Reacondicionamiento</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="section-title" style="margin-top:8px">Ítems del pedido</div>
+      <div style="font-size:11px;color:var(--text-3);margin-bottom:8px">
+        Para instrumentales cargá al menos un ítem. Para cajas, los ítems son opcionales si solo necesitás recuperar el registro.
+      </div>
+
+      <div class="tbl-wrap">
+        <table class="tbl" id="adm-items-table">
+          <thead>
+            <tr>
+              <th style="width:120px">Código</th>
+              <th>Descripción</th>
+              <th style="width:120px" class="adm-col-caja">Caja</th>
+              <th style="width:70px">Cant.</th>
+              <th>Observaciones</th>
+              <th style="width:30px">—</th>
+            </tr>
+          </thead>
+          <tbody id="adm-items-body"></tbody>
+        </table>
+      </div>
+
+      <button class="btn-add-row" style="margin-top:8px" onclick="adminAgregarItemManual()">＋ Agregar ítem</button>
+    </div>
+
+    <div class="modal-footer">
+      <div style="flex:1"></div>
+      <button class="btn btn-light" onclick="cerrarModalAltaManual()">Cancelar</button>
+      <button class="btn btn-primary" onclick="guardarAltaManual()">Agregar al registro</button>
     </div>
   </div>
 </div>
@@ -2531,6 +2639,79 @@ async function genPedidoId(tipo){
   throw new Error("No se pudo generar el contador. Intentá nuevamente.");
 }
 
+
+/* ── GUARDADO SEGURO DE PEDIDO NUEVO ────────────────────────
+   El mail SOLO se envía después de confirmar que el pedido quedó
+   realmente guardado en Firebase.
+
+   Además, antes de escribir se vuelven a leer los pedidos actuales
+   y se mezcla el nuevo pedido con ellos para no pisar pedidos creados
+   por otro usuario al mismo tiempo. */
+async function guardarPedidoNuevoSeguro(pedido){
+  const MAX_INTENTOS = 6;
+  let ultimoError = null;
+
+  for(let intento = 0; intento < MAX_INTENTOS; intento++){
+    try{
+      const { data, etag } = await fbGetWithEtag(FB_SEG);
+      const remoto = (data && typeof data === "object") ? data : {};
+
+      const cajas = Array.isArray(remoto.cajas) ? [...remoto.cajas] : [];
+      const inst  = Array.isArray(remoto.inst)  ? [...remoto.inst]  : [];
+
+      const destino = pedido.tipo === "caja" ? cajas : inst;
+
+      // Evitar duplicar el mismo ID si se reintenta.
+      if(!destino.some(p => p && p.id === pedido.id)){
+        destino.push(pedido);
+      }
+
+      const pay = {
+        cajas,
+        inst,
+        ts: Date.now()
+      };
+
+      await fbSetIfMatch(FB_SEG, pay, etag);
+
+      // Verificación real: no damos por guardado hasta volver a leerlo.
+      const verificacion = await fbGet(FB_SEG);
+      const listaVerificada = pedido.tipo === "caja"
+        ? (verificacion?.cajas || [])
+        : (verificacion?.inst || []);
+
+      if(!listaVerificada.some(p => p && p.id === pedido.id)){
+        throw new Error("VERIFY_FAILED");
+      }
+
+      seguimientoCajas = Array.isArray(verificacion?.cajas) ? verificacion.cajas : cajas;
+      seguimientoInst  = Array.isArray(verificacion?.inst)  ? verificacion.inst  : inst;
+
+      const local = {
+        cajas: seguimientoCajas,
+        inst: seguimientoInst,
+        ts: verificacion?.ts || pay.ts
+      };
+
+      lsSet(LS_SEG, local);
+      setSyncStatus("En vivo","sync-ok");
+      return true;
+
+    } catch(e){
+      ultimoError = e;
+      console.warn("Intento de guardado de pedido falló:", intento + 1, e);
+
+      // Conflicto o fallo transitorio: esperar un poco y volver a leer/mezclar.
+      if(intento < MAX_INTENTOS - 1){
+        await new Promise(resolve => setTimeout(resolve, 250 * (intento + 1)));
+      }
+    }
+  }
+
+  setSyncStatus("Error al guardar","sync-error");
+  throw ultimoError || new Error("No se pudo guardar el pedido.");
+}
+
 async function enviarPedido(){
   if(!requireLogin("formulario")) return;
 
@@ -2648,13 +2829,21 @@ async function enviarPedido(){
 
   pedido.modifs = items.filter(it=>it.obs || it.tachado || it.nuevo).length;
 
-  if(tipoPedido==="caja") seguimientoCajas.push(pedido);
-  else seguimientoInst.push(pedido);
+  try{
+    // Guardar y VERIFICAR en Firebase antes de mostrar éxito o mandar el mail.
+    await guardarPedidoNuevoSeguro(pedido);
+  } catch(e){
+    console.error("No se pudo persistir el pedido", pedido.id, e);
+    alert(
+      "No se pudo guardar el pedido en Firebase.\n\n" +
+      "El pedido NO fue enviado por mail y el formulario se mantiene cargado para que puedas intentar nuevamente."
+    );
+    return;
+  }
 
-  await S.save(true);
   S.render();
 
-  // Mandar mail a seguimiento (sin await para no bloquear la UI)
+  // El mail se manda únicamente después de comprobar que el pedido existe en Firebase.
   mailPedidoNuevo(pedido);
 
   alert("Pedido " + id + " registrado correctamente.\nFecha: " + fmtDate(fecha));
@@ -2697,6 +2886,208 @@ function limpiarFormulario(){
 async function salvarCounters(){
   lsSet(LS_CTRS, counters);
   try{ await fbSet(FB_CTRS, counters); } catch(e){}
+}
+
+
+/* ═══════════════════════════════════════════════════════════
+   ALTA MANUAL DE PEDIDO — SOLO ADMIN
+═══════════════════════════════════════════════════════════ */
+function abrirModalAltaManual(tipoInicial){
+  if(!tienePermiso("admin")) return;
+
+  const tipo = tipoInicial === "instrumental" ? "instrumental" : "caja";
+
+  const selTipo = document.getElementById("adm-ped-tipo");
+  const selResp = document.getElementById("adm-ped-responsable");
+  const fechaEl = document.getElementById("adm-ped-fecha");
+  const descEl = document.getElementById("adm-ped-descripcion");
+
+  selTipo.value = tipo;
+  fechaEl.value = new Date().toISOString().slice(0,10);
+
+  selResp.innerHTML = '<option value="">— seleccionar —</option>';
+  (usuariosDB || []).forEach(u=>{
+    if(!u.nombre) return;
+    const op = document.createElement("option");
+    op.value = u.nombre;
+    op.textContent = u.nombre;
+    selResp.appendChild(op);
+  });
+
+  document.getElementById("adm-ped-id").value = "";
+  document.getElementById("adm-ped-provision").value = "nacional";
+  document.getElementById("adm-ped-condicion").value = "nuevo";
+  descEl.value = tipo === "instrumental" ? "Pedido de instrumental" : "";
+
+  const tb = document.getElementById("adm-items-body");
+  tb.innerHTML = "";
+
+  actualizarAltaManualTipo();
+
+  if(tipo === "instrumental") adminAgregarItemManual();
+
+  document.getElementById("modal-alta-manual").classList.add("open");
+}
+
+function cerrarModalAltaManual(){
+  document.getElementById("modal-alta-manual")?.classList.remove("open");
+}
+
+function actualizarAltaManualTipo(){
+  const tipo = document.getElementById("adm-ped-tipo")?.value || "caja";
+  const nec = document.getElementById("adm-ped-necesidad");
+  poblarSelectNecesidad(nec, tipo, nec?.value || "");
+
+  const campoCond = document.getElementById("adm-campo-condicion");
+  if(campoCond) campoCond.style.display = tipo === "caja" ? "" : "none";
+
+  document.querySelectorAll("#adm-items-table .adm-col-caja").forEach(el=>{
+    el.style.display = tipo === "instrumental" ? "" : "none";
+  });
+
+  document.querySelectorAll("#adm-items-body tr").forEach(tr=>{
+    const cajaCell = tr.querySelector(".adm-item-caja-cell");
+    if(cajaCell) cajaCell.style.display = tipo === "instrumental" ? "" : "none";
+  });
+
+  const desc = document.getElementById("adm-ped-descripcion");
+  if(tipo === "instrumental" && desc && !desc.value.trim()){
+    desc.value = "Pedido de instrumental";
+  }
+}
+
+function adminAgregarItemManual(datos={}){
+  if(!tienePermiso("admin")) return;
+
+  const tipo = document.getElementById("adm-ped-tipo")?.value || "caja";
+  const tr = document.createElement("tr");
+
+  tr.innerHTML = `
+    <td><input class="ti adm-item-codigo" type="text" value="${esc(datos.codigo||"")}" placeholder="Código"></td>
+    <td><input class="ti adm-item-nombre" type="text" value="${esc(datos.nombre||"")}" placeholder="Descripción"></td>
+    <td class="adm-item-caja-cell adm-col-caja" style="${tipo==="instrumental"?"":"display:none"}">
+      <input class="ti adm-item-caja" type="text" value="${esc(datos.caja||"")}" placeholder="Caja">
+    </td>
+    <td><input class="ti adm-item-cantidad" type="number" min="1" value="${esc(datos.cantidad||"1")}" style="text-align:center"></td>
+    <td><input class="ti adm-item-obs" type="text" value="${esc(datos.obs||"")}" placeholder="Observaciones"></td>
+    <td style="text-align:center"><button class="del-btn" onclick="this.closest('tr').remove()">×</button></td>
+  `;
+
+  document.getElementById("adm-items-body").appendChild(tr);
+}
+
+async function ajustarContadorAltaManual(id, tipo){
+  const num = parseInt(String(id).replace(/\D/g,""), 10);
+  if(!Number.isFinite(num)) return;
+
+  for(let intento=0; intento<5; intento++){
+    try{
+      const {data, etag} = await fbGetWithEtag(FB_CTRS);
+      const actual = data || {caj:0, ins:0};
+
+      if(tipo === "caja"){
+        actual.caj = Math.max(actual.caj || 0, num);
+      } else {
+        actual.ins = Math.max(actual.ins || 0, num);
+      }
+
+      await fbSetIfMatch(FB_CTRS, actual, etag);
+      counters = actual;
+      lsSet(LS_CTRS, actual);
+      return;
+    } catch(e){
+      if(e.message !== "CONFLICT" || intento === 4) throw e;
+    }
+  }
+}
+
+async function guardarAltaManual(){
+  if(!tienePermiso("admin")) return;
+
+  const tipo = document.getElementById("adm-ped-tipo").value;
+  const id = document.getElementById("adm-ped-id").value.trim().toUpperCase();
+  const responsable = document.getElementById("adm-ped-responsable").value.trim();
+  const fecha = document.getElementById("adm-ped-fecha").value;
+  const necesidad = document.getElementById("adm-ped-necesidad").value;
+  const provision = document.getElementById("adm-ped-provision").value;
+  const descripcion = document.getElementById("adm-ped-descripcion").value.trim();
+  const condicion = tipo === "caja"
+    ? document.getElementById("adm-ped-condicion").value
+    : "nuevo";
+
+  if(!id){ alert("Ingresá el ID del pedido."); return; }
+  if(!responsable){ alert("Seleccioná el responsable."); return; }
+  if(!fecha){ alert("Ingresá la fecha del pedido."); return; }
+  if(!necesidad){ alert("Seleccioná la necesidad."); return; }
+  if(!descripcion){ alert("Ingresá la descripción."); return; }
+
+  const prefijoEsperado = tipo === "caja" ? "CAJ-" : "INS-";
+  if(!id.startsWith(prefijoEsperado)){
+    alert(`El ID debe comenzar con ${prefijoEsperado} para este tipo de pedido.`);
+    return;
+  }
+
+  const items = [...document.querySelectorAll("#adm-items-body tr")].map(tr=>({
+    codigo: tr.querySelector(".adm-item-codigo")?.value.trim() || "",
+    nombre: tr.querySelector(".adm-item-nombre")?.value.trim() || "",
+    caja: tr.querySelector(".adm-item-caja")?.value.trim() || "",
+    cantidad: tr.querySelector(".adm-item-cantidad")?.value || "1",
+    obs: tr.querySelector(".adm-item-obs")?.value.trim() || "",
+    realizado: false,
+    obsSeguimiento: ""
+  })).filter(it=>it.codigo || it.nombre);
+
+  if(tipo === "instrumental" && !items.length){
+    alert("Para un pedido de instrumental cargá al menos un ítem.");
+    return;
+  }
+
+  try{
+    const remoto = await fbGet(FB_SEG);
+    const todos = [
+      ...(Array.isArray(remoto?.cajas) ? remoto.cajas : []),
+      ...(Array.isArray(remoto?.inst) ? remoto.inst : [])
+    ];
+
+    if(todos.some(p=>p && p.id === id)){
+      alert(`El pedido ${id} ya existe. No se agregó ningún duplicado.`);
+      return;
+    }
+
+    const pedido = {
+      id,
+      tipo,
+      origen: "cirugia",
+      condicion,
+      descripcion,
+      codigo: "",
+      provision,
+      ubicacion: "",
+      responsable,
+      mailResponsable: "",
+      fecha,
+      necesidad,
+      items,
+      steps: {},
+      historialNecesidad: [],
+      modifs: 0,
+      creadoManual: true,
+      creadoManualPor: sesionActual?.nombre || "",
+      creadoManualAt: new Date().toISOString(),
+      createdAt: Date.now()
+    };
+
+    await guardarPedidoNuevoSeguro(pedido);
+    await ajustarContadorAltaManual(id, tipo);
+
+    S.render();
+    cerrarModalAltaManual();
+    showToast(`Pedido ${id} agregado al registro`, "var(--ok-text)", 3600);
+
+  } catch(e){
+    console.error("Error en alta manual:", e);
+    alert("No se pudo agregar el pedido al registro. No se realizó ningún cambio.");
+  }
 }
 
 /* ═══════════════════════════════════════════════════════════
@@ -3228,64 +3619,56 @@ if(isDeleted) return `<span class="badge badge-err" style="font-size:11px">Anula
   },
 
   async save(silent){
-    // Guardado con compare-and-swap (ETag), igual mecanismo que ya usa genPedidoId()
-    // para el contador. A diferencia de la versión anterior, si detecta que alguien
-    // guardó justo antes (conflicto), NUNCA descarta los cambios locales pendientes:
-    // reintenta el mismo guardado sobre la base más reciente de Firebase. Esto es lo
-    // que evita perder un pedido recién agregado o un borrado recién hecho cuando dos
-    // personas usan el sistema casi al mismo tiempo.
     const MAX_INTENTOS = 4;
+    let guardado = false;
+    let ultimoError = null;
+
     for(let intento = 0; intento < MAX_INTENTOS; intento++){
-      let etag = null;
-      let leidoConEtag = true;
       try{
-        const r = await fbGetWithEtag(FB_SEG);
-        etag = r.etag;
-      } catch(e){
-        leidoConEtag = false;
-      }
+        const { etag } = await fbGetWithEtag(FB_SEG);
+        const pay = { cajas: seguimientoCajas, inst: seguimientoInst, ts: Date.now() };
 
-      const pay = { cajas: seguimientoCajas, inst: seguimientoInst, ts: Date.now() };
-
-      if(!leidoConEtag){
-        // Sin poder leer con ETag (ej: falló la conexión): guardado directo, sin CAS.
-        lsSet(LS_SEG, pay);
-        try{
-          await fbSet(FB_SEG, pay);
-          setSyncStatus("En vivo","sync-ok");
-        } catch(e2){ setSyncStatus("Sin conexión","sync-error"); }
-        break;
-      }
-
-      try{
         await fbSetIfMatch(FB_SEG, pay, etag);
         lsSet(LS_SEG, pay);
         setSyncStatus("En vivo","sync-ok");
+        guardado = true;
         break;
+
       } catch(e){
-        if(e.message === "CONFLICT" && intento < MAX_INTENTOS-1){
-          // Alguien guardó justo ahora: se reintenta con los mismos cambios locales
-          // sobre la base más reciente de Firebase, sin tirarlos.
+        ultimoError = e;
+
+        if(e.message === "CONFLICT" && intento < MAX_INTENTOS - 1){
+          await new Promise(resolve => setTimeout(resolve, 180 * (intento + 1)));
           continue;
         }
-        // Se agotaron los reintentos u otro error: guardado directo como último
-        // recurso, preservando siempre los cambios locales.
-        try{
-          await fbSet(FB_SEG, pay);
-          lsSet(LS_SEG, pay);
-          setSyncStatus("En vivo","sync-ok");
-        } catch(e3){ setSyncStatus("Sin conexión","sync-error"); }
-        break;
+
+        // Para errores de red u otros errores, reintentar; no fingir éxito.
+        if(intento < MAX_INTENTOS - 1){
+          await new Promise(resolve => setTimeout(resolve, 250 * (intento + 1)));
+          continue;
+        }
       }
     }
+
+    if(!guardado){
+      console.error("No se pudieron guardar los cambios de seguimiento:", ultimoError);
+      setSyncStatus("Error al guardar","sync-error");
+      if(!silent){
+        showToast("No se pudieron guardar los cambios", "var(--err-text)", 4200);
+      }
+      return false;
+    }
+
     if(!silent){
-  const panelInstActivo = document.getElementById("seg-instrumentales")?.classList.contains("active");
-  setInlineSt(
-    panelInstActivo ? "seg-inst-st" : "seg-st",
-    "✓ Guardado " + new Date().toLocaleTimeString(),
-    "ok"
-  );
-}
+      const panelInstActivo = document.getElementById("seg-instrumentales")?.classList.contains("active");
+      setInlineSt(
+        panelInstActivo ? "seg-inst-st" : "seg-st",
+        "✓ Guardado " + new Date().toLocaleTimeString(),
+        "ok"
+      );
+    }
+
+    return true;
   }
 };
 
@@ -3832,7 +4215,7 @@ function cerrarModalMotivo(cancelado){
 }
 
 function eliminarPedidoDirecto(e, idx, tipo){
-  if(!tienePermiso("seguimiento")) return;
+  if(!tienePermiso("formulario") && !tienePermiso("seguimiento")) return;
   e.stopPropagation();
 
   const arr = tipo==="caja" ? seguimientoCajas : seguimientoInst;
@@ -3857,7 +4240,7 @@ function eliminarPedidoDirecto(e, idx, tipo){
 }
 
 function eliminarPedido(){
-  if(!tienePermiso("seguimiento")) return;
+  if(!tienePermiso("formulario") && !tienePermiso("seguimiento")) return;
   if(!modalPedidoId) return;
 
   const { tipo, idx } = modalPedidoId;
@@ -4861,6 +5244,23 @@ function aplicarPermisos(){
   bloquearZona("#page-maestro", puedeMaestro);
   bloquearZona("#page-admin", puedeAdmin);
 
+  // La X de anulación de las tablas también puede usarla Formulario o Seguimiento.
+  if(puedeFormulario || puedeSeguimiento){
+    document.querySelectorAll("#page-seguimiento .del-btn").forEach(el=>{
+      el.disabled = false;
+      el.style.pointerEvents = "auto";
+      el.style.opacity = "1";
+    });
+  }
+
+  // Alta manual de pedidos: EXCLUSIVA de usuarios con permiso admin.
+  document.querySelectorAll(".admin-add-pedido").forEach(el=>{
+    el.style.display = puedeAdmin ? "" : "none";
+    el.disabled = !puedeAdmin;
+    el.style.pointerEvents = puedeAdmin ? "auto" : "none";
+    el.style.opacity = puedeAdmin ? "1" : ".35";
+  });
+
   // Permitir cambiar entre cajas / instrumentales aunque sea solo visualización
   document.querySelectorAll(".sub-tab, .tipo-card").forEach(el=>{
     el.style.pointerEvents = "auto";
@@ -4887,6 +5287,7 @@ function aplicarPermisos(){
       const esConformidad = el.classList.contains("conformidad-btn");
       const esNecesidad = el.id === "modal-necesidad";
       const esRecibido = el.id === "modal-recibido";
+      const esAnular = el.id === "btn-anular-pedido";
 
       if(esConformidad){
         // Conformidad: la completa quien tiene permiso de formulario.
@@ -4897,6 +5298,9 @@ function aplicarPermisos(){
       } else if(esRecibido){
         // Recibido: exclusivo de Registro de seguimiento.
         el.disabled = !puedeSeguimiento;
+      } else if(esAnular){
+        // Anular: permitido para Formulario o Seguimiento.
+        el.disabled = !(puedeFormulario || puedeSeguimiento);
       } else {
         el.disabled = !puedeSeguimiento && !esCerrar && !esPDF;
       }
