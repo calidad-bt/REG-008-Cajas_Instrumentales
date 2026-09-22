@@ -1238,7 +1238,7 @@ tr.drag-over td { background: var(--accent-l) !important; border-top: 2px solid 
       </div>
 
       <div id="seg-pipeline" class="pipeline-card">
-        <div class="pipeline-title">Pipeline cajas abiertas</div>
+        <div class="pipeline-title" id="pipeline-title">Pipeline cajas abiertas</div>
         <div id="pipeline-rows"></div>
       </div>
 
@@ -1951,6 +1951,11 @@ function showSubTab(prefix, name, btn){
   }
   setTimeout(()=>{ aplicarPermisos(); }, 50);
 }
+  // El pipeline de arriba (seg-pipeline) sigue a la sub-tab Cajas/Instrumentales activa
+  if(prefix === "seg"){
+    pipelineSubModo = name;
+    renderPipeline();
+  }
 }
 
 /* ── LOAD ALL ────────────────────────────────────────────── */
@@ -3178,6 +3183,64 @@ const PIPELINE_STEPS = [
   "Foto de evidencia"
 ];
 
+// Pasos del proceso para el pipeline de instrumentales (subset de STEPS_INST_NACIONAL, sin el primero ni el último)
+const PIPELINE_STEPS_INST = [
+  "Definición de fábrica o compra",
+  "Generación de OFI",
+  "Fabricación de instrumentales en fábrica",
+  "Control de calidad",
+  "Grabado general"
+];
+
+// Sub-tab activa del bloque de Seguimiento ("cajas" o "instrumentales"); define qué pipeline se muestra
+let pipelineSubModo = "cajas";
+
+// Pinta el card "Pipeline ... abiertas/os" según la sub-tab activa (cajas / instrumentales).
+// Cajas: solo nacionales (las importadas siguen un checklist distinto, STEPS_IMPORTADA, sin
+// equivalencia con estos pasos). Instrumentales: se incluyen todos los abiertos, nacionales e
+// importados, a pedido — para los importados el "paso actual" puede no reflejar su checklist
+// real (usan STEPS_IMPORTADA), así que su ubicación en esta barra es aproximada.
+function renderPipeline(){
+  const calcPct = p => calcularProgresoPedido(p);
+  const titleEl = document.getElementById("pipeline-title");
+  const pipelineEl = document.getElementById("pipeline-rows");
+  if(!pipelineEl) return;
+
+  const esCajas = pipelineSubModo !== "instrumentales";
+  const steps = esCajas ? PIPELINE_STEPS : PIPELINE_STEPS_INST;
+  const stepsRef = esCajas ? STEPS_CAJA_NACIONAL : STEPS_INST_NACIONAL;
+  const fuente = esCajas ? (seguimientoCajas||[]) : (seguimientoInst||[]);
+
+  if(titleEl){
+    titleEl.textContent = esCajas ? "Pipeline cajas abiertas" : "Pipeline instrumentales abiertos";
+  }
+
+  const abiertosPipeline = esCajas
+    ? fuente.filter(p => !p.eliminado && calcPct(p) < 100 && p.provision !== "importada")
+    : fuente.filter(p => !p.eliminado && calcPct(p) < 100);
+
+  const conteos = steps.map(()=>0);
+  abiertosPipeline.forEach(ped=>{
+    for(let i=0; i<steps.length; i++){
+      const stepIdx = stepsRef.indexOf(steps[i]);
+      const key = `s${stepIdx}`;
+      if(!(ped.steps?.[key]?.done)){ conteos[i]++; break; }
+    }
+  });
+  const maxConteo = Math.max(...conteos, 1);
+
+  pipelineEl.innerHTML = steps.map((step,i)=>`
+    <div class="pipeline-row">
+      <span class="pipeline-step-name">${step}</span>
+      <div class="pipeline-bar-wrap">
+        <div class="pipeline-bar" style="width:${Math.round((conteos[i]/maxConteo)*100)}%"></div>
+      </div>
+      <span class="pipeline-count">${conteos[i]}</span>
+    </div>`).join("");
+
+  return conteos;
+}
+
 function renderKpisSeguimiento(){
   const cajas = seguimientoCajas || [];
   const inst = seguimientoInst || [];
@@ -3249,7 +3312,11 @@ function renderKpisSeguimiento(){
   setTxt("kpi-vencidos-sub", `${cajasVencidas.length} cajas · ${instVencidas.length} instrumentales`);
 
 
-  // Pipeline: cajas nacionales abiertas, primer step sin completar = etapa actual
+  // Pipeline visible en pantalla: sigue la sub-tab activa (Cajas / Instrumentales)
+  renderPipeline();
+
+  // Pipeline de cajas nacionales, siempre calculado (independiente de la sub-tab activa)
+  // para publicar al Tablero general (REG-001), que espera este desglose fijo.
   const cajasNacAbiertas = cajas.filter(p => !p.eliminado && calcPct(p) < 100 && p.provision !== "importada");
   const conteos = PIPELINE_STEPS.map(()=>0);
   cajasNacAbiertas.forEach(ped=>{
@@ -3259,18 +3326,6 @@ function renderKpisSeguimiento(){
       if(!(ped.steps?.[key]?.done)){ conteos[i]++; break; }
     }
   });
-  const maxConteo = Math.max(...conteos, 1);
-  const pipelineEl = document.getElementById("pipeline-rows");
-  if(pipelineEl){
-    pipelineEl.innerHTML = PIPELINE_STEPS.map((step,i)=>`
-      <div class="pipeline-row">
-        <span class="pipeline-step-name">${step}</span>
-        <div class="pipeline-bar-wrap">
-          <div class="pipeline-bar" style="width:${Math.round((conteos[i]/maxConteo)*100)}%"></div>
-        </div>
-        <span class="pipeline-count">${conteos[i]}</span>
-      </div>`).join("");
-  }
 
   // Cuello de botella: la etapa del pipeline con más cajas nacionales detenidas
   const cuelloTitulo = "Cuello de botella";
