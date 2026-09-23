@@ -5104,7 +5104,7 @@ window.addEventListener("DOMContentLoaded", ()=>{
   const fFecha = document.getElementById("f-fecha");
   if(fFecha) fFecha.value = new Date().toISOString().slice(0,10);
   initSession();
-  loadAll().then(()=>{ seedMaestroCajas(); aplicarPermisos(); setTimeout(()=>autoGrowBatch(document.querySelectorAll("textarea")), 200); });
+  loadAll().then(()=>{ seedMaestroCajas(); setTipo("caja"); aplicarPermisos(); setTimeout(()=>autoGrowBatch(document.querySelectorAll("textarea")), 200); });
 });
 </script>
 
