@@ -358,6 +358,10 @@ tr.drag-over td { background: var(--accent-l) !important; border-top: 2px solid 
   display: grid; grid-template-columns: 1fr 1fr 1fr;
   gap: 14px; margin-bottom: 16px;
 }
+.form-grid-4 {
+  display: grid; grid-template-columns: 1fr 1fr 1fr 1fr;
+  gap: 14px; margin-bottom: 16px;
+}
 .form-field { display: flex; flex-direction: column; gap: 4px; }
 .form-label {
   font-size: 10px; font-weight: 700;
@@ -888,7 +892,7 @@ tr.drag-over td { background: var(--accent-l) !important; border-top: 2px solid 
   .kpi-card{ padding:7px 6px 6px; min-height:auto; }
   .kpi-value{ font-size:15px; }
 
-  .form-grid, .form-grid-3{ grid-template-columns:1fr; gap:10px; }
+  .form-grid, .form-grid-3, .form-grid-4{ grid-template-columns:1fr; gap:10px; }
   .tipo-selector{ grid-template-columns:1fr; }
 
   .toolbar{ gap:6px; }
@@ -1016,7 +1020,7 @@ tr.drag-over td { background: var(--accent-l) !important; border-top: 2px solid 
       <div class="section-title">Datos generales</div>
 
       <!-- LÍNEA COMÚN: siempre visible -->
-      <div class="form-grid-3" id="bloque-datos-comunes" style="margin-bottom:12px">
+      <div class="form-grid-4" id="bloque-datos-comunes" style="margin-bottom:12px">
         <div class="form-field">
           <label class="form-label">Responsable del pedido <span style="color:var(--err-text)">*</span></label>
           <select class="form-select" id="f-responsable">
@@ -1031,16 +1035,16 @@ tr.drag-over td { background: var(--accent-l) !important; border-top: 2px solid 
             <option value="nuevo" id="opt-condicion-nuevo">Nuevo</option>
           </select>
         </div>
+        <div class="form-field" id="campo-cantidad-cajas" style="display:none">
+          <label class="form-label">Cantidad de cajas <span style="color:var(--err-text)">*</span></label>
+          <input class="form-input" type="number" id="f-cantidad-cajas" min="1" step="1" placeholder="Ej: 1">
+        </div>
         <div class="form-field" id="campo-provision-caja" style="display:none">
           <label class="form-label">Tipo de provisión</label>
           <select class="form-select" id="f-tipo-provision-gen">
             <option value="nacional">Nacional</option>
             <option value="importada">Importada</option>
           </select>
-        </div>
-        <div class="form-field" id="campo-cantidad-cajas" style="display:none">
-          <label class="form-label">Cantidad de cajas <span style="color:var(--err-text)">*</span></label>
-          <input class="form-input" type="number" id="f-cantidad-cajas" min="1" step="1" placeholder="Ej: 1">
         </div>
         
       </div>
@@ -1334,13 +1338,13 @@ tr.drag-over td { background: var(--accent-l) !important; border-top: 2px solid 
           <table class="tbl mobile-cards" id="tbl-seg-inst" style="width:100%;table-layout:fixed">
             <thead>
 <tr>
-  <th style="width:7%"># Prior.</th>
+  <th style="width:6%"># Prior.</th>
   <th style="width:7%">ID</th>
-  <th style="width:17%">Quien pide</th>
+  <th style="width:12%">Quien pide</th>
   <th style="width:15%">Fechas</th>
-  <th style="width:19%">Items</th>
+  <th style="width:27%">Items</th>
   <th style="width:13%">Progreso</th>
-  <th style="width:12%;text-align:center">Estado</th>
+  <th style="width:10%;text-align:center">Estado</th>
   <th style="width:10%;text-align:center" class="no-print">—</th>
 </tr>
 </thead>
