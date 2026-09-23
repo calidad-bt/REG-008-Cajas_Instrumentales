@@ -1038,6 +1038,10 @@ tr.drag-over td { background: var(--accent-l) !important; border-top: 2px solid 
             <option value="importada">Importada</option>
           </select>
         </div>
+        <div class="form-field" id="campo-cantidad-cajas" style="display:none">
+          <label class="form-label">Cantidad de cajas <span style="color:var(--err-text)">*</span></label>
+          <input class="form-input" type="number" id="f-cantidad-cajas" min="1" step="1" placeholder="Ej: 1">
+        </div>
         
       </div>
 
@@ -1257,8 +1261,9 @@ tr.drag-over td { background: var(--accent-l) !important; border-top: 2px solid 
     <option value="abierto">Abiertos</option>
     <option value="completo">Completados</option>
   </select>
-  <input id="filtro-cajas-resp" type="text" placeholder="Responsable…"
-    class="toolbar-input" style="width:160px" oninput="S.render()">
+  <select id="filtro-cajas-resp" class="toolbar-select" style="width:170px" onchange="S.render()">
+    <option value="">Responsable (todos)</option>
+  </select>
   <select id="filtro-cajas-necesidad" class="toolbar-select" style="width:190px" onchange="S.render()">
     <option value="">Necesidad (todas)</option>
     <option value="fria">Caja fría</option>
@@ -1299,15 +1304,16 @@ tr.drag-over td { background: var(--accent-l) !important; border-top: 2px solid 
       <!-- SUB: INSTRUMENTALES -->
       <div class="sub-panel" id="seg-instrumentales">
         <div class="toolbar no-print">
-  <input id="filtro-inst-q" type="text" placeholder="Buscar ID, descripción…"
+  <input id="filtro-inst-q" type="text" placeholder="Buscar ID, descripción, ítem…"
     class="toolbar-input" style="width:200px" oninput="S.render()">
   <select id="filtro-inst-est" class="toolbar-select" style="width:130px" onchange="S.render()">
     <option value="">Todos los estados</option>
     <option value="abierto">Abiertos</option>
     <option value="completo">Completados</option>
   </select>
-  <input id="filtro-inst-resp" type="text" placeholder="Responsable…"
-    class="toolbar-input" style="width:160px" oninput="S.render()">
+  <select id="filtro-inst-resp" class="toolbar-select" style="width:170px" onchange="S.render()">
+    <option value="">Responsable (todos)</option>
+  </select>
   <select id="filtro-inst-necesidad" class="toolbar-select" style="width:190px" onchange="S.render()">
     <option value="">Necesidad (todas)</option>
     <option value="fria">Instrumental frío</option>
@@ -1330,9 +1336,9 @@ tr.drag-over td { background: var(--accent-l) !important; border-top: 2px solid 
 <tr>
   <th style="width:7%"># Prior.</th>
   <th style="width:7%">ID</th>
-  <th style="width:29%">Descripción</th>
+  <th style="width:17%">Quien pide</th>
   <th style="width:15%">Fechas</th>
-  <th style="width:7%">Items</th>
+  <th style="width:19%">Items</th>
   <th style="width:13%">Progreso</th>
   <th style="width:12%;text-align:center">Estado</th>
   <th style="width:10%;text-align:center" class="no-print">—</th>
@@ -2101,6 +2107,7 @@ function guardarDraftTipo(){
     responsable: document.getElementById("f-responsable").value,
     fecha: document.getElementById("f-fecha")?.value || "",
     necesidad: document.getElementById("f-necesidad")?.value || "",
+    cantidadCajas: document.getElementById("f-cantidad-cajas")?.value || "",
     codigoExistente: document.getElementById("f-codigo-existente").value,
     codigoNuevo: document.getElementById("f-codigo-nuevo").value,
     descNuevo: document.getElementById("f-descripcion-nuevo").value,
@@ -2115,6 +2122,7 @@ function restaurarDraftTipo(tipo){
   document.getElementById("f-responsable").value = d.responsable || "";
   if(document.getElementById("f-fecha")) document.getElementById("f-fecha").value = d.fecha || new Date().toISOString().slice(0,10);
   poblarSelectNecesidad(document.getElementById("f-necesidad"), tipo, d.necesidad || "");
+  if(document.getElementById("f-cantidad-cajas")) document.getElementById("f-cantidad-cajas").value = d.cantidadCajas || "";
 
   document.getElementById("f-codigo-existente").value = d.codigoExistente || "";
   document.getElementById("f-codigo-nuevo").value = d.codigoNuevo || "";
@@ -2199,6 +2207,7 @@ function setTipo(tipo){
   // Mostrar/ocultar campos según tipo
   document.getElementById("campo-condicion").style.display = esCaja ? "" : "none";
   document.getElementById("campo-provision-caja").style.display = esCaja ? "" : "none";
+  document.getElementById("campo-cantidad-cajas").style.display = esCaja ? "" : "none";
   document.getElementById("campo-fecha-inst").style.display = "";
   document.getElementById("campo-fecha-nec-inst").style.display = "";
 
@@ -2731,6 +2740,16 @@ async function enviarPedido(){
   if(!fecha){ alert("Ingresá la fecha del pedido."); return; }
   if(!necesidad){ alert("Indicá la necesidad del pedido."); return; }
 
+  let cantidadCajas = "";
+  if(tipoPedido==="caja"){
+    const cantCajasEl = document.getElementById("f-cantidad-cajas");
+    cantidadCajas = parseInt(cantCajasEl?.value, 10);
+    if(!Number.isInteger(cantidadCajas) || cantidadCajas < 1){
+      alert("Ingresá la cantidad de cajas (un número entero de 1 o más).");
+      return;
+    }
+  }
+
   let descripcion = "", codigo = "", provision = "nacional", ubicacion = "";
   const esExistente = condicion==="existente";
 
@@ -2822,6 +2841,7 @@ async function enviarPedido(){
     codigo,
     provision,
     ubicacion,
+    cantidadCajas: tipoPedido==="caja" ? cantidadCajas : undefined,
     responsable,
     mailResponsable: sesionActual?.mail || "",
     fecha,
@@ -2868,6 +2888,9 @@ function limpiarFormulario(){
   poblarSelectNecesidad(document.getElementById("f-necesidad"), tipoActual, "");
   const fEl=document.getElementById("f-fecha");
   if(fEl) fEl.value=new Date().toISOString().slice(0,10);
+
+  const cantCajasEl = document.getElementById("f-cantidad-cajas");
+  if(cantCajasEl) cantCajasEl.value = "";
 
   document.getElementById("f-codigo-existente").value="";
   document.getElementById("f-codigo-nuevo").value="";
@@ -3552,6 +3575,12 @@ const S = {
     const filtEst = estEl?.value  || "";
     const filtOr  = origEl?.value || "";
 const respEl = document.getElementById(esCajas ? "filtro-cajas-resp" : "filtro-inst-resp");
+if(respEl && respEl.tagName === "SELECT"){
+  const curResp = respEl.value;
+  const nombres = [...new Set((data||[]).map(p=>p.responsable).filter(Boolean))].sort((a,b)=>a.localeCompare(b,"es"));
+  respEl.innerHTML = `<option value="">Responsable (todos)</option>` + nombres.map(n=>`<option value="${esc(n)}">${esc(n)}</option>`).join("");
+  if(curResp && nombres.includes(curResp)) respEl.value = curResp;
+}
 const filtResp = (respEl?.value || "").toLowerCase().trim();
 const necEl = document.getElementById(esCajas ? "filtro-cajas-necesidad" : "filtro-inst-necesidad");
 const filtNecesidad = necEl?.value || "";
@@ -3563,10 +3592,22 @@ const filtNecesidad = necEl?.value || "";
     let completados = data.filter(p => calcPct(p) >= 100);
 
     // Aplicar filtros
-    const matchQ   = (ped, q) => !q || (ped.id||"").toLowerCase().includes(q) || (ped.descripcion||"").toLowerCase().includes(q) || (ped.responsable||"").toLowerCase().includes(q);
+    const matchQ = (ped, q) => {
+      if(!q) return true;
+      if((ped.id||"").toLowerCase().includes(q)) return true;
+      if((ped.descripcion||"").toLowerCase().includes(q)) return true;
+      if((ped.responsable||"").toLowerCase().includes(q)) return true;
+      // En instrumentales, además se busca por descripción de los ítems pedidos
+      if(!esCajas && (ped.items||[]).some(it => (it.nombre||"").toLowerCase().includes(q))) return true;
+      return false;
+    };
     const matchEst = (ped, fe) => !fe || (fe==="completo" ? calcPct(ped)>=100 : calcPct(ped)<100);
     const matchOr  = (ped, fo) => !fo || ped.origen === fo;
-const matchResp = (ped, fr) => !fr || (ped.responsable || "").toLowerCase().includes(fr);
+const matchResp = (ped, fr) => {
+  if(!fr) return true;
+  const resp = (ped.responsable || "").toLowerCase().trim();
+  return resp === fr;
+};
 const matchNec = (ped, necesidad) => !necesidad || ped.necesidad === necesidad;
 
     let filtered = data.filter(p => matchQ(p,q) && matchEst(p,filtEst) && matchOr(p,filtOr) && matchResp(p,filtResp) && matchNec(p,filtNecesidad));
@@ -3642,14 +3683,17 @@ const matchNec = (ped, necesidad) => !necesidad || ped.necesidad === necesidad;
   <button class="del-btn" onclick="eliminarPedidoDirecto(event,${realIdx},'caja')" title="Eliminar pedido">×</button>
 </td>`;
       } else {
+        const itemsResumen = (ped.items||[]).length
+          ? (ped.items||[]).map(it=>`${esc(it.nombre || it.codigo || "—")} <span style="color:var(--text-3)">(${esc(it.cantidad||1)})</span>`).join("<br>")
+          : `<span style="color:var(--text-3)">—</span>`;
         tr.innerHTML=`
           <td data-label="# Prior." style="text-align:center;font-family:var(--mono);font-size:11px"><span class="row-num">${i+1}</span></td>
           <td data-label="ID" style="font-family:var(--mono);font-weight:600;font-size:11px;color:var(--accent)">${esc(ped.id)}</td>
-          <td data-label="Descripción"><span style="font-size:12px;font-weight:600">${esc(ped.descripcion)}</span><br><span style="font-size:10px;color:var(--text-3)">${esc(ped.responsable)}</span></td>
+          <td data-label="Quien pide"><span style="font-size:12px;font-weight:600">${esc(ped.responsable) || "—"}</span></td>
           <td data-label="Fechas" style="font-size:11px;line-height:1.35">
   ${renderFechasPedido(ped)}
 </td>
-          <td data-label="Items" style="font-family:var(--mono);font-size:11px;text-align:center">${(ped.items||[]).length}</td>
+          <td data-label="Items" style="font-size:11px;line-height:1.4">${itemsResumen}</td>
           <td data-label="Progreso">
             <div class="progress-wrap"><div class="progress-bar" style="width:${pct}%;${barColor}"></div></div>
             <div class="progress-label">${pct}% · ${doneSteps}/${totalSteps}</div>
@@ -3834,6 +3878,7 @@ if(ped.eliminado){
   // Items del pedido con selector de procedencia y observaciones
   if(ped.items && ped.items.length){
     const items = ped.items;
+    const esInstrumental = ped.tipo === "instrumental";
     const thSt = "font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#8A949E;padding:4px 6px;border-bottom:1px solid #B0B6BC;text-align:left";
     html += `<div style="margin-bottom:14px">
       <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#8A949E;margin-bottom:6px">Contenido del pedido (${items.length} ítems)</div>
@@ -3843,6 +3888,7 @@ if(ped.eliminado){
             <th style="${thSt};width:4%;text-align:center">#</th>
             <th style="${thSt};width:11%">Código</th>
             <th style="${thSt}">Descripción</th>
+            ${esInstrumental ? `<th style="${thSt};width:12%">Caja</th>` : ""}
             <th style="${thSt};width:5%;text-align:center">Cant.</th>
             <th style="${thSt};width:18%">Procedencia</th>
             <th style="${thSt};width:5%;text-align:center">✓</th>
@@ -3877,10 +3923,12 @@ if(ped.eliminado){
       const tdBd = "border-bottom:1px solid #D0D4D9";
       const itemChk = !!it.check;
       const itemObsSeg = it.obsSeg || "";
+      const cajaTxt = it.caja ? esc(it.caja) : `<span style="color:#8A949E">—</span>`;
       html += `<tr style="${tachSt}">
         <td style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:#8A949E;padding:5px 6px;${tdBd};text-align:center">${i+1}</td>
         <td style="font-family:'IBM Plex Mono',monospace;font-size:11px;padding:5px 6px;${tdBd}">${codigoTxt}</td>
         <td style="font-size:11px;padding:5px 6px;${tdBd}">${esc(nombre)}</td>
+        ${esInstrumental ? `<td style="font-size:11px;padding:5px 6px;${tdBd}">${cajaTxt}</td>` : ""}
         <td style="font-family:'IBM Plex Mono',monospace;font-size:11px;text-align:center;padding:5px 6px;${tdBd}">${cantTxt}</td>
         <td style="padding:4px 6px;${tdBd}">
           <select${selDisabled} data-item-idx="${i}" onchange="updateItemProcedencia(this,${i})">${optsHtml}</select>
