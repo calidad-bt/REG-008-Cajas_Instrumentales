@@ -1037,7 +1037,7 @@ tr.drag-over td { background: var(--accent-l) !important; border-top: 2px solid 
         </div>
         <div class="form-field" id="campo-cantidad-cajas" style="display:none">
           <label class="form-label">Cantidad de cajas <span style="color:var(--err-text)">*</span></label>
-          <input class="form-input" type="number" id="f-cantidad-cajas" min="1" step="1" placeholder="Ej: 1">
+          <input class="form-input" type="number" id="f-cantidad-cajas" min="1" step="1" placeholder="Ej: 1" value="1">
         </div>
         <div class="form-field" id="campo-provision-caja" style="display:none">
           <label class="form-label">Tipo de provisión</label>
@@ -2126,7 +2126,7 @@ function restaurarDraftTipo(tipo){
   document.getElementById("f-responsable").value = d.responsable || "";
   if(document.getElementById("f-fecha")) document.getElementById("f-fecha").value = d.fecha || new Date().toISOString().slice(0,10);
   poblarSelectNecesidad(document.getElementById("f-necesidad"), tipo, d.necesidad || "");
-  if(document.getElementById("f-cantidad-cajas")) document.getElementById("f-cantidad-cajas").value = d.cantidadCajas || "";
+  if(document.getElementById("f-cantidad-cajas")) document.getElementById("f-cantidad-cajas").value = d.cantidadCajas || "1";
 
   document.getElementById("f-codigo-existente").value = d.codigoExistente || "";
   document.getElementById("f-codigo-nuevo").value = d.codigoNuevo || "";
@@ -2909,7 +2909,7 @@ function limpiarFormulario(){
   if(fEl) fEl.value=new Date().toISOString().slice(0,10);
 
   const cantCajasEl = document.getElementById("f-cantidad-cajas");
-  if(cantCajasEl) cantCajasEl.value = "";
+  if(cantCajasEl) cantCajasEl.value = "1";
 
   document.getElementById("f-codigo-existente").value="";
   document.getElementById("f-codigo-nuevo").value="";
@@ -3793,7 +3793,11 @@ if(isDeleted) return `<span class="badge badge-err" style="font-size:11px">Anula
 /* ── MODAL SEGUIMIENTO ───────────────────────────────────── */
 function openModalSeg(ped, idx){
   modalPedidoId = { tipo: ped.tipo, idx };
-  document.getElementById("modal-seg-title").textContent = ped.descripcion || ped.id;
+  const cantCajasModal = parseInt(ped.cantidadCajas, 10);
+  const cantCajasTxt = (ped.tipo === "caja" && Number.isInteger(cantCajasModal) && cantCajasModal > 0)
+    ? ` <span style="font-weight:400;color:var(--text-3)">(${cantCajasModal} ${cantCajasModal === 1 ? "caja" : "cajas"})</span>`
+    : "";
+  document.getElementById("modal-seg-title").innerHTML = esc(ped.descripcion || ped.id) + cantCajasTxt;
   document.getElementById("modal-seg-id").textContent = ped.id;
 
   const btnBorrar = document.getElementById("btn-borrar-pedido");
@@ -5119,7 +5123,7 @@ window.addEventListener("DOMContentLoaded", ()=>{
   const fFecha = document.getElementById("f-fecha");
   if(fFecha) fFecha.value = new Date().toISOString().slice(0,10);
   initSession();
-  loadAll().then(()=>{ seedMaestroCajas(); aplicarPermisos(); setTimeout(()=>autoGrowBatch(document.querySelectorAll("textarea")), 200); });
+  loadAll().then(()=>{ seedMaestroCajas(); setTipo("caja"); aplicarPermisos(); setTimeout(()=>autoGrowBatch(document.querySelectorAll("textarea")), 200); });
 });
 </script>
 
