@@ -1263,6 +1263,8 @@ tr.drag-over td { background: var(--accent-l) !important; border-top: 2px solid 
   <select id="filtro-cajas-est" class="toolbar-select" style="width:130px" onchange="S.render()">
     <option value="">Todos los estados</option>
     <option value="abierto">Abiertos</option>
+    <option value="pendiente">Pendientes</option>
+    <option value="en_curso">En curso</option>
     <option value="completo">Completados</option>
   </select>
   <select id="filtro-cajas-resp" class="toolbar-select" style="width:170px" onchange="S.render()">
@@ -1313,6 +1315,8 @@ tr.drag-over td { background: var(--accent-l) !important; border-top: 2px solid 
   <select id="filtro-inst-est" class="toolbar-select" style="width:130px" onchange="S.render()">
     <option value="">Todos los estados</option>
     <option value="abierto">Abiertos</option>
+    <option value="pendiente">Pendientes</option>
+    <option value="en_curso">En curso</option>
     <option value="completo">Completados</option>
   </select>
   <select id="filtro-inst-resp" class="toolbar-select" style="width:170px" onchange="S.render()">
@@ -2231,13 +2235,19 @@ function fechaLimiteNecesidad(ped){
   return "";
 }
 
+// Fecha en que se cerró el pedido (solo si está completo), para el semáforo de fechas.
+function fechaCierrePedido(ped){
+  if(calcularProgresoPedido(ped) < 100) return "";
+  return ped.fechaReal || ped.completadoAt || "";
+}
+
 function chipNecesidad(ped){
   if(ped.necesidad){
     const cls = necesidadBadgeClass(ped.necesidad);
     return `<span class="badge ${cls}" style="font-size:10px" title="${esc(necesidadLabel(ped.tipo, ped.necesidad))}">${esc(necesidadCorto(ped.necesidad))}</span>`;
   }
   // Pedido anterior al cambio: todavía tiene una fecha real cargada
-  if(esFechaValida(ped.fechaEstimada)) return chipSemaforo(ped.fechaEstimada);
+  if(esFechaValida(ped.fechaEstimada)) return chipSemaforo(ped.fechaEstimada, fechaCierrePedido(ped));
   return `<span class="info-chip">—</span>`;
 }
 
@@ -3543,8 +3553,18 @@ function publicarKpiCompartido(resumen){
 
 
 /* ── SEMÁFORO DE FECHAS ──────────────────────────────────── */
-function chipSemaforo(fechaStr){
+function chipSemaforo(fechaStr, fechaCierre){
   if(!fechaStr) return `<span class="info-chip">—</span>`;
+  // Pedido cerrado: se evalúa contra la fecha de cierre, no contra hoy.
+  // Cerrado el mismo día o antes → verde; cerrado después → rojo.
+  if(esFechaValida(fechaCierre)){
+    const f0 = new Date(fechaStr + "T00:00:00");
+    const c0 = new Date(fechaCierre + "T00:00:00");
+    const tarde = Math.round((c0 - f0) / 86400000);
+    const cls0 = tarde > 0 ? "chip-rojo" : "chip-verde";
+    const tit0 = tarde > 0 ? "entregado " + tarde + " día" + (tarde===1?"":"s") + " tarde" : "entregado a tiempo";
+    return `<span class="info-chip ${cls0}" title="${tit0}">${fmtDate(fechaStr)}</span>`;
+  }
   const hoy = new Date(); hoy.setHours(0,0,0,0);
   const f = new Date(fechaStr + "T00:00:00");
   const dias = Math.round((f - hoy) / 86400000);
@@ -3637,7 +3657,7 @@ function renderFechasPedido(ped){
     </div>
     <div style="margin-top:3px">
       <span style="font-size:10px;color:var(--text-3);font-weight:700">EST</span>
-      ${chipSemaforo(ped.fechaEntregaEstimada)}
+      ${chipSemaforo(ped.fechaEntregaEstimada, fechaCierrePedido(ped))}
     </div>
     <div style="margin-top:3px">
       <span style="font-size:10px;color:var(--text-3);font-weight:700">REAL</span>
@@ -3692,7 +3712,14 @@ const filtNecesidad = necEl?.value || "";
       if(!esCajas && (ped.items||[]).some(it => (it.nombre||"").toLowerCase().includes(q))) return true;
       return false;
     };
-    const matchEst = (ped, fe) => !fe || (fe==="completo" ? calcPct(ped)>=100 : calcPct(ped)<100);
+    const matchEst = (ped, fe) => {
+      if(!fe) return true;
+      const pct = calcPct(ped);
+      if(fe === "completo")  return pct >= 100;
+      if(fe === "pendiente") return !ped.eliminado && pct === 0;
+      if(fe === "en_curso")  return !ped.eliminado && pct > 0 && pct < 100;
+      return pct < 100; // abierto
+    };
     const matchOr  = (ped, fo) => !fo || ped.origen === fo;
 const matchResp = (ped, fr) => {
   if(!fr) return true;
