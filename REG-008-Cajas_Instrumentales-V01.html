@@ -1885,7 +1885,7 @@ async function actualizarCajasDesdeGoogleSheets(){
     const hint = document.getElementById("hint-cajas-vacio");
     if(hint) hint.style.display = MC._rows.length ? "none" : "";
 
-    await MC.save();
+    if(!(await MC.save())) return;
     updateMaestroKpis();
     setSyncStatus("En vivo", "sync-ok");
     alert("Listo: " + MC._rows.length + " cajas cargadas desde Google Sheets (antes había " + antes + ").");
@@ -2004,6 +2004,7 @@ if(rSeg && Array.isArray(rSeg.cajas) && Array.isArray(rSeg.inst)){
   seguimientoCajas = rSeg.cajas;
   seguimientoInst  = rSeg.inst;
   lsSet(LS_SEG, rSeg);
+  lastTs.seg = rSeg.ts || 0;
 } else {
   // rSeg vino null o con forma inesperada. Esto puede significar "todavía no hay
   // nada cargado" (primer uso real) o un problema transitorio de lectura — no hay
@@ -2023,12 +2024,14 @@ if(rSeg && Array.isArray(rSeg.cajas) && Array.isArray(rSeg.inst)){
     const miRows = (rMi && (rMi.ts||0) >= (lMi.ts||0)) ? (rMi.rows||[]) : (lMi.rows||[]);
     if(rMi && (rMi.ts||0) >= (lMi.ts||0)) lsSet(LS_MI, rMi);
     MI.restore(miRows);
+    lastTs.mi = (rMi && rMi.ts) || 0;
 
     // Maestro cajas
     const lMc = lsGet(LS_MC) || { ts:0, rows:[] };
     const mcRows = (rMc && (rMc.ts||0) >= (lMc.ts||0)) ? (rMc.rows||[]) : (lMc.rows||[]);
     if(rMc && (rMc.ts||0) >= (lMc.ts||0)) lsSet(LS_MC, rMc);
     MC.restore(mcRows);
+    lastTs.mc = (rMc && rMc.ts) || 0;
 
     S.render();
     cargarSelectoresFormulario();
@@ -2053,16 +2056,55 @@ if(rSeg && Array.isArray(rSeg.cajas) && Array.isArray(rSeg.inst)){
   autoGrowBatch(document.querySelectorAll("textarea"));
 }
 
+/* ── SEGUIMIENTO: pedidos editados en esta pestaña ─────────────
+   Se anotan para poder mezclar con lo que haya en Firebase sin pisar
+   los pedidos que editó otro usuario. */
+const _segSucios = new Map();   // id -> nro de edición
+const _segBorrados = new Set(); // ids borrados definitivamente en esta pestaña
+function marcarSucio(ped){ if(ped && ped.id) _segSucios.set(ped.id, (_segSucios.get(ped.id)||0) + 1); }
+function snapSucios(){ return { sucios: new Map(_segSucios), borrados: new Set(_segBorrados) }; }
+function limpiarSucios(snap){
+  snap.sucios.forEach((v,id)=>{ if(_segSucios.get(id) === v) _segSucios.delete(id); });
+  snap.borrados.forEach(id=>_segBorrados.delete(id));
+}
+function listaFb(v){
+  if(Array.isArray(v)) return v.filter(Boolean);
+  if(v && typeof v === "object") return Object.values(v).filter(Boolean);
+  return [];
+}
+function mezclarLista(remota, local, snap){
+  const locPorId = new Map((local||[]).filter(p=>p && p.id).map(p=>[p.id, p]));
+  return listaFb(remota)
+    .filter(p=>!snap.borrados.has(p.id))
+    .map(p=> (snap.sucios.has(p.id) && locPorId.has(p.id)) ? locPorId.get(p.id) : p);
+}
+function reubicarModal(){
+  if(!modalPedidoId || !modalPedidoId.id) return;
+  const arr = modalPedidoId.tipo === "caja" ? seguimientoCajas : seguimientoInst;
+  const i = arr.findIndex(p=>p && p.id === modalPedidoId.id);
+  if(i >= 0) modalPedidoId.idx = i;
+}
+
 function startPolling(){
   setInterval(async ()=>{
+    if(document.hidden) return; // pestaña en segundo plano: no consultar
     try{
-      const rSeg = await fbGet(FB_SEG);
-      const stored = lsGet(LS_SEG)||{ts:0};
-      if(rSeg && (rSeg.ts||0) > (stored.ts||0)){
-        seguimientoCajas = rSeg.cajas||[];
-        seguimientoInst  = rSeg.inst||[];
-        lsSet(LS_SEG, rSeg);
-        S.render();
+      // Solo se lee el ts (unos bytes). El registro completo se baja únicamente si cambió.
+      const remotoTs = await fbGet(FB_SEG + "/ts");
+      if((remotoTs || 0) !== (lastTs.seg || 0)){
+        if(_segSucios.size || _segBorrados.size || S._enCurso){
+          S.save(true); // hay cambios locales pendientes: el guardado mezcla y sube
+        } else {
+          const rSeg = await fbGet(FB_SEG);
+          if(rSeg && typeof rSeg === "object" && !_segSucios.size && !S._enCurso){
+            seguimientoCajas = listaFb(rSeg.cajas);
+            seguimientoInst  = listaFb(rSeg.inst);
+            lastTs.seg = rSeg.ts || 0;
+            lsSet(LS_SEG, rSeg);
+            reubicarModal();
+            S.render();
+          }
+        }
       }
       setSyncStatus("En vivo","sync-ok");
     } catch(e){ setSyncStatus("Sin conexión","sync-error"); }
@@ -2679,8 +2721,9 @@ async function guardarPedidoNuevoSeguro(pedido){
       const { data, etag } = await fbGetWithEtag(FB_SEG);
       const remoto = (data && typeof data === "object") ? data : {};
 
-      const cajas = Array.isArray(remoto.cajas) ? [...remoto.cajas] : [];
-      const inst  = Array.isArray(remoto.inst)  ? [...remoto.inst]  : [];
+      const snap = snapSucios();
+      const cajas = mezclarLista(remoto.cajas, seguimientoCajas, snap);
+      const inst  = mezclarLista(remoto.inst,  seguimientoInst,  snap);
 
       const destino = pedido.tipo === "caja" ? cajas : inst;
 
@@ -2717,6 +2760,9 @@ async function guardarPedidoNuevoSeguro(pedido){
       };
 
       lsSet(LS_SEG, local);
+      lastTs.seg = local.ts;
+      limpiarSucios(snap);
+      reubicarModal();
       setSyncStatus("En vivo","sync-ok");
       return true;
 
@@ -3478,12 +3524,20 @@ let _kpiPublishTimer = null;
 // que el usuario interactúe con la página.
 setInterval(()=>{ try{ renderKpisSeguimiento(); }catch(e){} }, 5*60*1000);
 
+let _ultimoKpiFirma = null;
+let _ultimoKpiTs = 0;
 function publicarKpiCompartido(resumen){
   // Debounce "de cola": espera 1.2s sin nuevas llamadas antes de publicar,
   // para no mandar nunca un resumen calculado a medio cargar.
+  // Solo escribe si el resumen cambió, o como latido una vez por hora.
   if(_kpiPublishTimer) clearTimeout(_kpiPublishTimer);
   _kpiPublishTimer = setTimeout(()=>{
-    fbSet("/sgc/kpis/REG-008", { ...resumen, ts: Date.now() }).catch(()=>{});
+    const firma = JSON.stringify(resumen);
+    if(firma === _ultimoKpiFirma && (Date.now() - _ultimoKpiTs) < 60*60*1000) return;
+    const ts = Date.now();
+    fbSet("/sgc/kpis/REG-008", { ...resumen, ts })
+      .then(()=>{ _ultimoKpiFirma = firma; _ultimoKpiTs = ts; })
+      .catch(()=>{});
   }, 1200);
 }
 
@@ -3754,63 +3808,76 @@ if(isDeleted) return `<span class="badge badge-err" style="font-size:11px">Anula
     });
   },
 
-  async save(silent){
-    const MAX_INTENTOS = 4;
-    let guardado = false;
-    let ultimoError = null;
+  _enCurso: null,
+  _pendiente: false,
+  _mostrar: false,
 
+  async save(silent){
+    if(!silent) this._mostrar = true;
+    if(this._enCurso){ this._pendiente = true; return this._enCurso; }
+    this._enCurso = (async ()=>{
+      let ok = false;
+      try{
+        do{ this._pendiente = false; ok = await this._saveOnce(); } while(this._pendiente);
+      } catch(e){ ok = false; }
+      const mostrar = this._mostrar;
+      this._mostrar = false;
+      this._enCurso = null;
+      if(this._mezclado){ this._mezclado = false; try{ this.render(); }catch(e){} }
+      if(!ok){
+        setSyncStatus("Error al guardar","sync-error");
+        if(mostrar) showToast("No se pudieron guardar los cambios", "var(--err-text)", 4200);
+      } else if(mostrar){
+        const panelInstActivo = document.getElementById("seg-instrumentales")?.classList.contains("active");
+        setInlineSt(panelInstActivo ? "seg-inst-st" : "seg-st", "✓ Guardado " + new Date().toLocaleTimeString(), "ok");
+      }
+      return ok;
+    })();
+    return this._enCurso;
+  },
+
+  async _saveOnce(){
+    const MAX_INTENTOS = 4;
+    let ultimoError = null;
     for(let intento = 0; intento < MAX_INTENTOS; intento++){
       try{
-        const { etag } = await fbGetWithEtag(FB_SEG);
+        // Solo se lee el ts. Si nadie guardó desde la última sincronización, se sube directo.
+        const remotoTs = await fbGet(FB_SEG + "/ts");
+        let remoto = null;
+        if((remotoTs || 0) !== (lastTs.seg || 0)){
+          // Alguien guardó en el medio: traer el registro una vez y mezclar,
+          // dejando los pedidos ajenos como están y reemplazando solo los editados acá.
+          remoto = await fbGet(FB_SEG);
+        }
+        const snap = snapSucios();
+        if(remoto && typeof remoto === "object"){
+          seguimientoCajas = mezclarLista(remoto.cajas, seguimientoCajas, snap);
+          seguimientoInst  = mezclarLista(remoto.inst,  seguimientoInst,  snap);
+          reubicarModal();
+          this._mezclado = true;
+        }
         const pay = { cajas: seguimientoCajas, inst: seguimientoInst, ts: Date.now() };
-
-        await fbSetIfMatch(FB_SEG, pay, etag);
+        await fbSet(FB_SEG, pay);
+        lastTs.seg = pay.ts;
         lsSet(LS_SEG, pay);
+        limpiarSucios(snap);
         setSyncStatus("En vivo","sync-ok");
-        guardado = true;
-        break;
-
+        return true;
       } catch(e){
         ultimoError = e;
-
-        if(e.message === "CONFLICT" && intento < MAX_INTENTOS - 1){
-          await new Promise(resolve => setTimeout(resolve, 180 * (intento + 1)));
-          continue;
-        }
-
-        // Para errores de red u otros errores, reintentar; no fingir éxito.
         if(intento < MAX_INTENTOS - 1){
-          await new Promise(resolve => setTimeout(resolve, 250 * (intento + 1)));
-          continue;
+          await new Promise(r => setTimeout(r, 250 * (intento + 1)));
         }
       }
     }
-
-    if(!guardado){
-      console.error("No se pudieron guardar los cambios de seguimiento:", ultimoError);
-      setSyncStatus("Error al guardar","sync-error");
-      if(!silent){
-        showToast("No se pudieron guardar los cambios", "var(--err-text)", 4200);
-      }
-      return false;
-    }
-
-    if(!silent){
-      const panelInstActivo = document.getElementById("seg-instrumentales")?.classList.contains("active");
-      setInlineSt(
-        panelInstActivo ? "seg-inst-st" : "seg-st",
-        "✓ Guardado " + new Date().toLocaleTimeString(),
-        "ok"
-      );
-    }
-
-    return true;
+    console.error("No se pudieron guardar los cambios de seguimiento:", ultimoError);
+    return false;
   }
 };
 
 /* ── MODAL SEGUIMIENTO ───────────────────────────────────── */
 function openModalSeg(ped, idx){
-  modalPedidoId = { tipo: ped.tipo, idx };
+  modalPedidoId = { tipo: ped.tipo, idx, id: ped.id };
   const cantCajasModal = parseInt(ped.cantidadCajas, 10);
   const cantCajasTxt = (ped.tipo === "caja" && Number.isInteger(cantCajasModal) && cantCajasModal > 0)
     ? ` <span style="font-weight:400;color:var(--text-3)">(${cantCajasModal} ${cantCajasModal === 1 ? "caja" : "cajas"})</span>`
@@ -4116,6 +4183,7 @@ function cambiarEstadoPed(event, tipo, idx, sel){
 /* ── REGISTRO DE MODIFICACIONES ──────────────────────────── */
 function registrarEdicion(ped){
   if(!ped) return;
+  marcarSucio(ped);
   ped.ultimaEdicion = {
     usuario: sesionActual?.nombre || "—",
     fecha: new Date().toISOString()
@@ -4271,6 +4339,7 @@ function updateItemCheck(cb, itemIdx){
   S.save(true);
 }
 
+let _obsSegTimer = null;
 function updateItemObsSeg(ta, itemIdx){
   if(!tienePermiso("seguimiento")) return;
   if(!modalPedidoId) return;
@@ -4280,7 +4349,8 @@ function updateItemObsSeg(ta, itemIdx){
   if(!ped.items) return;
   if(ped.items[itemIdx]) ped.items[itemIdx].obsSeg = ta.value;
   registrarEdicion(ped);
-  S.save(true);
+  clearTimeout(_obsSegTimer);
+  _obsSegTimer = setTimeout(()=>{ S.save(true); }, 800);
 }
 
 function updateItemProcedencia(sel, itemIdx){
@@ -4328,6 +4398,7 @@ function toggleStep(si, cb){
   if(stepDiv) stepDiv.classList.toggle("step-done", cb.checked);
   registrarEdicion(ped);
   updateProgress(ped);
+  S.save(true);
 }
 
 function updateStep(si){
@@ -4445,6 +4516,7 @@ function eliminarPedidoDirecto(e, idx, tipo){
       ped.eliminado = true;
       ped.eliminadoAt = new Date().toISOString();
       ped.eliminadoMotivo = motivo;
+      marcarSucio(ped);
 
       await S.save(true);
       S.render();
@@ -4471,6 +4543,7 @@ function eliminarPedido(){
       ped.eliminado = true;
       ped.eliminadoAt = new Date().toISOString();
       ped.eliminadoMotivo = motivo;
+      marcarSucio(ped);
 
       await S.save(true);
       S.render();
@@ -4499,6 +4572,7 @@ async function borrarPedidoDefinitivo(){
 
   if(!confirm(`Esta acción borra el pedido ${ped.id} de forma DEFINITIVA (no se puede deshacer, a diferencia de "Anular"). ¿Confirmás?`)) return;
 
+  _segBorrados.add(ped.id);
   arr.splice(idx, 1);
 
   await S.save(true);
@@ -4511,6 +4585,22 @@ async function borrarPedidoDefinitivo(){
 /* ═══════════════════════════════════════════════════════════
    MI: MAESTRO INSTRUMENTALES
 ═══════════════════════════════════════════════════════════ */
+async function maestroTsLibre(fbPath, tsCargado, stId, nombre){
+  let remotoTs;
+  try{ remotoTs = await fbGet(fbPath + "/ts"); }
+  catch(e){
+    setSyncStatus("Sin conexión","sync-error");
+    setInlineSt(stId, "✗ No se guardó (sin conexión)", "dirty");
+    return false;
+  }
+  if((remotoTs || 0) > (tsCargado || 0)){
+    setInlineSt(stId, "✗ No se guardó: otro usuario lo modificó", "dirty");
+    alert("Otro usuario guardó cambios en el " + nombre + " mientras tenías la página abierta.\n\nNo se guardó para no pisar sus cambios. Anotá lo que modificaste, recargá la página y volvé a cargarlo.");
+    return false;
+  }
+  return true;
+}
+
 const MI = {
   _rows: [],
   getAll(){ return this._rows; },
@@ -4617,15 +4707,24 @@ const MI = {
     });
   },
   async save(){
-  if(!requireLogin("maestro")) return;
+    if(!requireLogin("maestro")) return false;
+    setInlineSt("mi-st","Guardando…","");
+    if(!(await maestroTsLibre(FB_MI, lastTs.mi, "mi-st", "Maestro de instrumentales"))) return false;
     this._rows = this._ser();
     const pay = { rows: this._rows, ts: Date.now() };
+    try{ await fbSet(FB_MI, pay); }
+    catch(e){
+      setSyncStatus("Sin conexión","sync-error");
+      setInlineSt("mi-st","✗ No se guardó (error de conexión)","dirty");
+      return false;
+    }
+    lastTs.mi = pay.ts;
     lsSet(LS_MI, pay);
-    try{ await fbSet(FB_MI, pay); setSyncStatus("En vivo","sync-ok"); }
-    catch(e){ setSyncStatus("Sin conexión","sync-error"); }
+    setSyncStatus("En vivo","sync-ok");
     setInlineSt("mi-st","✓ Guardado "+new Date().toLocaleTimeString(),"ok");
     this._refreshBadges();
     cargarSelectoresFormulario();
+    return true;
   },
   _refreshBadges(){
     document.querySelectorAll("#tbody-maestro-inst tr").forEach(tr=>{
@@ -4928,15 +5027,24 @@ const MC = {
     newEl.scrollIntoView({behavior:"smooth",block:"start"});
   },
   async save(){
-  if(!requireLogin("maestro")) return;
+    if(!requireLogin("maestro")) return false;
+    setInlineSt("mc-st","Guardando…","");
+    if(!(await maestroTsLibre(FB_MC, lastTs.mc, "mc-st", "Maestro de cajas"))) return false;
     this._rows = this._ser();
     const pay = { rows: this._rows, ts: Date.now() };
+    try{ await fbSet(FB_MC, pay); }
+    catch(e){
+      setSyncStatus("Sin conexión","sync-error");
+      setInlineSt("mc-st","✗ No se guardó (error de conexión)","dirty");
+      return false;
+    }
+    lastTs.mc = pay.ts;
     lsSet(LS_MC, pay);
-    try{ await fbSet(FB_MC, pay); setSyncStatus("En vivo","sync-ok"); }
-    catch(e){ setSyncStatus("Sin conexión","sync-error"); }
+    setSyncStatus("En vivo","sync-ok");
     setInlineSt("mc-st","✓ Guardado "+new Date().toLocaleTimeString(),"ok");
     this._refreshBadges();
     cargarSelectoresFormulario();
+    return true;
   },
   restore(rows){
     // Migrar items que tienen "Tipo: X" en obs → mover a campo tipo
@@ -5212,7 +5320,7 @@ window.addEventListener("DOMContentLoaded", ()=>{
   const fFecha = document.getElementById("f-fecha");
   if(fFecha) fFecha.value = new Date().toISOString().slice(0,10);
   initSession();
-  loadAll().then(()=>{ seedMaestroCajas(); setTipo("caja"); aplicarPermisos(); setTimeout(()=>autoGrowBatch(document.querySelectorAll("textarea")), 200); });
+  loadAll().then(()=>{ updateMaestroKpis(); setTipo("caja"); aplicarPermisos(); setTimeout(()=>autoGrowBatch(document.querySelectorAll("textarea")), 200); });
 });
 </script>
 
