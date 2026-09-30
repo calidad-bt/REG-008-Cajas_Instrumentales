@@ -2235,10 +2235,29 @@ function fechaLimiteNecesidad(ped){
   return "";
 }
 
-// Fecha en que se cerró el pedido (solo si está completo), para el semáforo de fechas.
-function fechaCierrePedido(ped){
-  if(calcularProgresoPedido(ped) < 100) return "";
-  return ped.fechaReal || ped.completadoAt || "";
+// Fecha EST con color solo mientras el pedido está abierto:
+// vencida → rojo; vence en 5 días o menos (incluye hoy) → amarillo; resto → sin color.
+function chipEst(ped){
+  if(!esFechaValida(ped.fechaEntregaEstimada)) return `<span class="info-chip">—</span>`;
+  const txt = fmtDate(ped.fechaEntregaEstimada);
+  if(ped.eliminado || calcularProgresoPedido(ped) >= 100) return `<span class="info-chip">${txt}</span>`;
+  const hoy = new Date(); hoy.setHours(0,0,0,0);
+  const dias = Math.round((new Date(ped.fechaEntregaEstimada + "T00:00:00") - hoy) / 86400000);
+  if(dias < 0)   return `<span class="info-chip chip-rojo" title="${Math.abs(dias)} día${Math.abs(dias)===1?"":"s"} vencido">${txt}</span>`;
+  if(dias <= 5)  return `<span class="info-chip chip-amarillo" title="vence en ${dias} día${dias===1?"":"s"}">${txt}</span>`;
+  return `<span class="info-chip">${txt}</span>`;
+}
+
+// Fecha REAL con color: se compara contra la estimada de entrega.
+// Mismo día o antes → verde; después → rojo; sin estimada → sin color.
+function chipReal(ped){
+  if(!esFechaValida(ped.fechaReal)) return `<span class="info-chip">—</span>`;
+  const ref = ped.fechaEntregaEstimada;
+  if(!esFechaValida(ref)) return `<span class="info-chip">${fmtDate(ped.fechaReal)}</span>`;
+  const tarde = Math.round((new Date(ped.fechaReal + "T00:00:00") - new Date(ref + "T00:00:00")) / 86400000);
+  const cls = tarde > 0 ? "chip-rojo" : "chip-verde";
+  const tit = tarde > 0 ? "entregado " + tarde + " día" + (tarde===1?"":"s") + " tarde" : "entregado a tiempo";
+  return `<span class="info-chip ${cls}" title="${tit}">${fmtDate(ped.fechaReal)}</span>`;
 }
 
 function chipNecesidad(ped){
@@ -2247,7 +2266,7 @@ function chipNecesidad(ped){
     return `<span class="badge ${cls}" style="font-size:10px" title="${esc(necesidadLabel(ped.tipo, ped.necesidad))}">${esc(necesidadCorto(ped.necesidad))}</span>`;
   }
   // Pedido anterior al cambio: todavía tiene una fecha real cargada
-  if(esFechaValida(ped.fechaEstimada)) return chipSemaforo(ped.fechaEstimada, fechaCierrePedido(ped));
+  if(esFechaValida(ped.fechaEstimada)) return `<span class="info-chip">${fmtDate(ped.fechaEstimada)}</span>`;
   return `<span class="info-chip">—</span>`;
 }
 
@@ -3553,18 +3572,8 @@ function publicarKpiCompartido(resumen){
 
 
 /* ── SEMÁFORO DE FECHAS ──────────────────────────────────── */
-function chipSemaforo(fechaStr, fechaCierre){
+function chipSemaforo(fechaStr){
   if(!fechaStr) return `<span class="info-chip">—</span>`;
-  // Pedido cerrado: se evalúa contra la fecha de cierre, no contra hoy.
-  // Cerrado el mismo día o antes → verde; cerrado después → rojo.
-  if(esFechaValida(fechaCierre)){
-    const f0 = new Date(fechaStr + "T00:00:00");
-    const c0 = new Date(fechaCierre + "T00:00:00");
-    const tarde = Math.round((c0 - f0) / 86400000);
-    const cls0 = tarde > 0 ? "chip-rojo" : "chip-verde";
-    const tit0 = tarde > 0 ? "entregado " + tarde + " día" + (tarde===1?"":"s") + " tarde" : "entregado a tiempo";
-    return `<span class="info-chip ${cls0}" title="${tit0}">${fmtDate(fechaStr)}</span>`;
-  }
   const hoy = new Date(); hoy.setHours(0,0,0,0);
   const f = new Date(fechaStr + "T00:00:00");
   const dias = Math.round((f - hoy) / 86400000);
@@ -3657,11 +3666,11 @@ function renderFechasPedido(ped){
     </div>
     <div style="margin-top:3px">
       <span style="font-size:10px;color:var(--text-3);font-weight:700">EST</span>
-      ${chipSemaforo(ped.fechaEntregaEstimada, fechaCierrePedido(ped))}
+      ${chipEst(ped)}
     </div>
     <div style="margin-top:3px">
       <span style="font-size:10px;color:var(--text-3);font-weight:700">REAL</span>
-      <span class="info-chip ok">${ped.fechaReal ? fmtDate(ped.fechaReal) : "—"}</span>
+      ${chipReal(ped)}
     </div>
   `;
 }
