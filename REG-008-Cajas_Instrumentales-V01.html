@@ -3462,16 +3462,59 @@ function renderKpisSeguimiento(){
     }
   });
 
-  // Cuello de botella: la etapa del pipeline con más cajas nacionales detenidas
-  const cuelloTitulo = "Cuello de botella";
+  // Cuello de botella de instrumentales: todos los abiertos (nacionales e
+  // importados), igual que el pipeline de pantalla de la sub-tab Instrumentales.
+  const instAbiertasPipe = inst.filter(p => !p.eliminado && calcPct(p) < 100);
+  const conteosInst = PIPELINE_STEPS_INST.map(()=>0);
+  instAbiertasPipe.forEach(ped=>{
+    for(let i=0; i<PIPELINE_STEPS_INST.length; i++){
+      const stepIdx = STEPS_INST_NACIONAL.indexOf(PIPELINE_STEPS_INST[i]);
+      if(!(ped.steps?.[`s${stepIdx}`]?.done)){ conteosInst[i]++; break; }
+    }
+  });
 
   // ── Publicar resumen para el Tablero general (REG-001) ──
+  // Tiles: solo indicadores que NO están en la dona (total, avance, entrega).
+  // Dona: estados mutuamente excluyentes, para que su centro sume el total.
   const trendCajas = calcularTrendMensual008(cajas, p=>p.fecha, 6);
   const trendInst  = calcularTrendMensual008(inst,  p=>p.fecha, 6);
-  const cajasCompletadas = cajas.filter(p=>!p.eliminado && calcPct(p)===100).length;
-  const instCompletadas  = inst.filter(p=>!p.eliminado && calcPct(p)===100).length;
-  const cajasPendientes  = cajas.filter(p=>!p.eliminado && calcPct(p)===0).length;
-  const instPendientes   = inst.filter(p=>!p.eliminado && calcPct(p)===0).length;
+
+  const resumenGrupo = (arr)=>{
+    const c = { pendientes:0, enCurso:0, porVencer:0, vencidos:0, completadas:0, anulados:0 };
+    arr.forEach(p=>{
+      const pct = calcPct(p);
+      if(p.eliminado)          c.anulados++;
+      else if(pct >= 100)      c.completadas++;
+      else if(estaVencido(p))  c.vencidos++;
+      else if(porVencer(p))    c.porVencer++;
+      else if(pct > 0)         c.enCurso++;
+      else                     c.pendientes++;
+    });
+    const activos = arr.filter(p=>!p.eliminado);
+    const avanceG = activos.length
+      ? Math.round(activos.reduce((a,p)=>a+calcPct(p),0) / activos.length) : 0;
+    const dias = activos
+      .filter(p => p.fecha && p.fechaReal)
+      .map(p => Math.round((new Date(p.fechaReal+"T00:00:00") - new Date(p.fecha+"T00:00:00")) / 86400000))
+      .filter(n => Number.isFinite(n) && n >= 0);
+    const entrega = dias.length
+      ? Math.round(dias.reduce((a,b)=>a+b,0)/dias.length) + " día" + (Math.round(dias.reduce((a,b)=>a+b,0)/dias.length)===1?"":"s")
+      : "—";
+    return { c, avanceG, entrega };
+  };
+  const rc = resumenGrupo(cajas);
+  const ri = resumenGrupo(inst);
+  const itemsDona = (c)=>{
+    const items = [
+      {l:"Pendientes",  v: c.pendientes},
+      {l:"En curso",    v: c.enCurso},
+      {l:"Por vencer",  v: c.porVencer},
+      {l:"Vencidos",    v: c.vencidos},
+      {l:"Completadas", v: c.completadas}
+    ];
+    if(c.anulados) items.push({l:"Anulados", v: c.anulados});
+    return items;
+  };
 
   publicarKpiCompartido({
     label: "Cajas Instrumentales",
@@ -3483,44 +3526,30 @@ function renderKpisSeguimiento(){
       { titulo: "Cajas",
         trend: trendCajas,
         kpis: [
-          {l:"Total",     v: totalCajas},
-          {l:"Por vencer", v: cajasPorVencer.length},
-          {l:"Vencidos",  v: cajasVencidas.length}
+          {l:"Total",            v: totalCajas},
+          {l:"Avance promedio",  v: rc.avanceG + "%"},
+          {l:"Entrega promedio", v: rc.entrega}
         ],
-        chart: {
-          title: "Estado de cajas",
-          items: [
-            {l:"Pendientes",  v: cajasPendientes},
-            {l:"En curso",    v: cajasEnCurso.length},
-            {l:"Por vencer",  v: cajasPorVencer.length},
-            {l:"Vencidos",    v: cajasVencidas.length},
-            {l:"Completadas", v: cajasCompletadas}
-          ]
+        chart: { title: "Estado de cajas", items: itemsDona(rc.c) },
+        bars: {
+          title: "Cuello de botella · Cajas",
+          items: PIPELINE_STEPS.map((step,i)=>({ l: step, v: conteos[i] }))
         }
       },
       { titulo: "Instrumentales",
         trend: trendInst,
         kpis: [
-          {l:"Total",      v: totalInst},
-          {l:"Por vencer", v: instPorVencer.length},
-          {l:"Vencidos",   v: instVencidas.length}
+          {l:"Total",            v: totalInst},
+          {l:"Avance promedio",  v: ri.avanceG + "%"},
+          {l:"Entrega promedio", v: ri.entrega}
         ],
-        chart: {
-          title: "Estado de instrumentales",
-          items: [
-            {l:"Pendientes",  v: instPendientes},
-            {l:"En curso",    v: instEnCurso.length},
-            {l:"Por vencer",  v: instPorVencer.length},
-            {l:"Vencidos",    v: instVencidas.length},
-            {l:"Completadas", v: instCompletadas}
-          ]
+        chart: { title: "Estado de instrumentales", items: itemsDona(ri.c) },
+        bars: {
+          title: "Cuello de botella · Instrumentales",
+          items: PIPELINE_STEPS_INST.map((step,i)=>({ l: step, v: conteosInst[i] }))
         }
       }
-    ],
-    bars: {
-      title: cuelloTitulo,
-      items: PIPELINE_STEPS.map((step,i)=>({ l: step, v: conteos[i] }))
-    }
+    ]
   });
 }
 
