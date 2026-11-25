@@ -734,7 +734,9 @@ tr.drag-over td { background: var(--accent-l) !important; border-top: 2px solid 
 .pi-tbl td { padding: 6px; border: 1px solid var(--border-d); vertical-align: middle; height: 30px; }
 .pi-tbl td.pi-obs { background: white; }
 .pi-tbl tr { page-break-inside: avoid; }
-.pi-tachado td:not(.pi-obs) { text-decoration: line-through; color: var(--text-3); }
+.pi-tachado td:not(.pi-obs):not(.pi-check) { text-decoration: line-through; color: var(--text-3); }
+.pi-tbl td.pi-check { text-align: center; }
+.pi-box { display: inline-block; width: 14px; height: 14px; border: 1.5px solid var(--text-2); border-radius: 2px; vertical-align: middle; font-size: 11px; font-weight: 700; line-height: 12px; color: var(--ok-text); text-align: center; }
 
 /* ── PRINT ───────────────────────────────────────────────── */
 @media print {
@@ -3700,9 +3702,10 @@ function imprimirItemsPedido(tipo, idx){
       <td>${esc(it.nombre || it.descripcion || "")}</td>
       ${esInst ? `<td style="font-family:var(--mono)">${esc(it.caja||"")}</td>` : ""}
       <td style="text-align:center;font-family:var(--mono)">${esc(it.cantidad||"")}</td>
+      <td class="pi-check"><span class="pi-box">${it.check ? "✓" : ""}</span></td>
       <td class="pi-obs"></td>
     </tr>`).join("")
-    : `<tr><td colspan="${esInst?6:5}" style="text-align:center;color:var(--text-3)">Sin ítems cargados</td></tr>`;
+    : `<tr><td colspan="${esInst?7:6}" style="text-align:center;color:var(--text-3)">Sin ítems cargados</td></tr>`;
 
   cont.innerHTML = `
     <div class="card">
@@ -3729,7 +3732,8 @@ function imprimirItemsPedido(tipo, idx){
             <th>Descripción</th>
             ${esInst ? `<th style="width:80px">Caja</th>` : ""}
             <th style="width:45px;text-align:center">Cant.</th>
-            <th style="width:32%">Obs.</th>
+            <th style="width:32px;text-align:center">✓</th>
+            <th style="width:30%">Obs.</th>
           </tr></thead>
           <tbody>${filas}</tbody>
         </table>
